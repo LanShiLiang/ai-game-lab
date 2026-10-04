@@ -6,6 +6,7 @@ import {randomBytes} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {WebSocketServer,WebSocket} from 'ws';
+import {packSnapshot} from '../games/apex-rush/wire.js';
 import {Race,sanitizeInput} from '../games/apex-rush/sim.js';
 const rootDefault=fileURLToPath(new URL('../',import.meta.url)),entry='/games/apex-rush/';
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.png':'image/png','.jpg':'image/jpeg','.zip':'application/zip'};
@@ -28,16 +29,16 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
  const expireRooms=()=>{const stamp=now();for(const r of rooms.values())if(stamp>=r.expiresAt){rooms.delete(r.id);for(const s of r.members.values()){s.roomId=null;send(s,{type:'room-expired',message:'房间创建已满8小时，现已自动关闭。请重新创建或加入其他房间。'});s.close(4001,'Room expired');}r.members.clear();}};
  const server=createServer(async(req,res)=>{expireRooms();if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);res.end();return;}
   if((!serveLab&&req.url.split('?')[0]==='/')||req.url.split('?')[0]===entry.slice(0,-1)){res.writeHead(302,{Location:entry+(online?'?online=1':'?lan=1'),'Cache-Control':'no-store'});res.end();return;}
-  if(req.url.split('?')[0]==='/api/racing/health'){json(res,200,{ok:true,protocol:1,version:'1.2.0',maxPlayers:16,maxRooms,roomTtlMs,serverNow:now(),online,rooms:rooms.size,port:actualPort,addresses:online?[]:lanAddresses()});return;}
+  if(req.url.split('?')[0]==='/api/racing/health'){json(res,200,{ok:true,protocol:1,version:'1.2.1',maxPlayers:16,maxRooms,roomTtlMs,snapshotHz:online?12:20,serverNow:now(),online,rooms:rooms.size,port:actualPort,addresses:online?[]:lanAddresses()});return;}
   if(req.url.split('?')[0]==='/api/racing/rooms'){json(res,200,{maxRooms,roomTtlMs,serverNow:now(),rooms:[...rooms.values()].map(r=>{const info=roomInfo(r);return {roomId:info.roomId,createdAt:r.createdAt,expiresAt:r.expiresAt,hostName:info.players.find(p=>p.id===info.hostId)?.name||'车手',track:info.track,mode:info.mode,laps:info.laps,humanCount:info.humanCount,count:info.count,status:info.status};})});return;}
   const f=resolveFile(req.url);if(!f){json(res,404,{error:'Not found'});return;}try{const r=await realpath(f),rel=path.relative(base,r);if(rel.startsWith('..')||path.isAbsolute(rel)||!resolveFile('/'+rel.split(path.sep).join('/'))||!(await stat(r)).isFile())throw Error();const b=await readFile(r);res.writeHead(200,{'Content-Type':MIME[path.extname(r)],'Content-Length':b.length,'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});res.end(req.method==='HEAD'?undefined:b);}catch{json(res,404,{error:'Not found'});}
  });
  server.requestTimeout=10000;server.headersTimeout=10000;
- const wss=new WebSocketServer({noServer:true,maxPayload:2048,perMessageDeflate:false});
+ const wss=new WebSocketServer({noServer:true,maxPayload:2048,perMessageDeflate:online?{threshold:256,concurrencyLimit:2,zlibDeflateOptions:{level:3,memLevel:5},clientNoContextTakeover:true}:false});
  const roomInfo=r=>({type:'room',roomId:r.id,createdAt:r.createdAt,expiresAt:r.expiresAt,serverNow:now(),online,hostId:r.hostId,humanCount:r.members.size,count:r.race.count,track:r.race.track.id,mode:r.race.mode,laps:r.race.laps,status:r.race.status,players:r.race.snapshot().players.map(p=>({id:p.id,name:p.name,bot:p.bot,team:p.team,color:p.color}))});
  const broadcastInfo=r=>{for(const s of r.members.values())send(s,roomInfo(r));};
  const detach=s=>{const r=rooms.get(s.roomId);if(!r)return;r.race.removeHuman(s.playerId);r.members.delete(s.playerId);if(r.hostId===s.playerId)r.hostId=r.members.keys().next().value||null;if(!r.members.size)rooms.delete(r.id);else broadcastInfo(r);s.roomId=null;};
- const join=(s,r,msg)=>{if(s.roomId){fail(s,'请先离开当前房间');return;}const p=r.race.addHuman(msg.name,msg.color);if(!p){fail(s,'房间已满（最多16人）');return;}s.playerId=p.id;s.roomId=r.id;s.lastInput=Date.now();r.members.set(p.id,s);r.hostId||=p.id;const suffix=entry+'?'+(online?'online=1&':'')+'room='+r.id;send(s,{type:'joined',roomId:r.id,createdAt:r.createdAt,expiresAt:r.expiresAt,serverNow:now(),online,playerId:p.id,hostId:r.hostId,serverTime:serverStep/60,epoch:r.epoch,snapshot:r.race.snapshot(),invites:publicBaseURL?[publicBaseURL+suffix]:lanAddresses().map(a=>'http://'+a+':'+actualPort+suffix),local:publicBaseURL?publicBaseURL+suffix:'http://localhost:'+actualPort+suffix});broadcastInfo(r);};
+ const join=(s,r,msg)=>{if(s.roomId){fail(s,'请先离开当前房间');return;}const p=r.race.addHuman(msg.name,msg.color);if(!p){fail(s,'房间已满（最多16人）');return;}s.motionAck=online&&msg.motionAck===1;s.pendingFrames=[];s.lastSentStep=0;s.playerId=p.id;s.roomId=r.id;s.lastInput=Date.now();r.members.set(p.id,s);r.hostId||=p.id;const suffix=entry+'?'+(online?'online=1&':'')+'room='+r.id;send(s,{type:'joined',roomId:r.id,createdAt:r.createdAt,expiresAt:r.expiresAt,serverNow:now(),online,playerId:p.id,hostId:r.hostId,serverTime:serverStep/60,epoch:r.epoch,snapshot:r.race.snapshot(),invites:publicBaseURL?[publicBaseURL+suffix]:lanAddresses().map(a=>'http://'+a+':'+actualPort+suffix),local:publicBaseURL?publicBaseURL+suffix:'http://localhost:'+actualPort+suffix});broadcastInfo(r);};
  server.on('upgrade',(req,socket,head)=>{let ok=false;try{const url=new URL(req.url,'http://'+req.headers.host),origin=new URL(req.headers.origin);ok=url.pathname==='/racing'&&origin.host===req.headers.host&&['http:','https:'].includes(origin.protocol);}catch{}if(!ok||wss.clients.size>=(online?64:128)){socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');socket.destroy();return;}wss.handleUpgrade(req,socket,head,s=>wss.emit('connection',s,req));});
  wss.on('connection',s=>{s.isAlive=true;s.lastInput=Date.now();s.window=Date.now();s.messages=0;s.on('pong',()=>s.isAlive=true);
   s.on('message',raw=>{expireRooms();if(Date.now()-s.window>1000){s.window=Date.now();s.messages=0;}if(++s.messages>150){s.close(1008,'Too many messages');return;}let m;try{m=JSON.parse(raw);}catch{return fail(s,'请求格式无效');}if(!m||typeof m!=='object')return;
@@ -47,6 +48,7 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
    if(!r)return fail(s,'尚未加入房间');
    if(m.type==='input'){r.race.setInput(s.playerId,sanitizeInput(m.input));s.lastInput=Date.now();}
    else if(m.type==='start'||m.type==='restart'){if(r.hostId!==s.playerId)return fail(s,'只有房主可以发车');if(m.type==='start'){if(r.race.status==='grid'){r.epoch++;r.race.start();}}else{r.epoch++;r.race.restart();}broadcastInfo(r);}
+   else if(m.type==='ack'){if(s.motionAck&&Number.isInteger(m.step)&&m.step<=s.lastSentStep)s.pendingFrames=s.pendingFrames.filter(step=>step>m.step);}
    else if(m.type==='team'){if(r.race.status!=='grid')return fail(s,'比赛中不能换队');const p=r.race.players.find(p=>p.id===s.playerId),team=m.team===1?1:0;if(r.race.players.filter(p=>!p.bot&&p.team===team).length>=r.race.count/2)return fail(s,'该队已满');p.team=team;const humans=r.race.players.filter(p=>!p.bot),bots=r.race.players.filter(p=>p.bot);const needed=[r.race.count/2-humans.filter(p=>p.team===0).length,r.race.count/2-humans.filter(p=>p.team===1).length];for(const b of bots){const t=needed[0]>0?0:1;b.team=t;needed[t]--;}broadcastInfo(r);}
    else if(m.type==='leave')detach(s);
   });s.on('close',()=>detach(s));s.on('error',()=>{});
@@ -63,12 +65,16 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
    }
    serverStep++;accumulator-=1/60;
   }
-  if(snapshotTimer>=1/20){
-   snapshotTimer%=1/20;
+  const period=1/(online?12:20);
+  if(snapshotTimer>=period){
+   snapshotTimer%=period;
    for(const r of rooms.values()){
     // Serialize once for the room, rather than rebuilding the entire race per viewer.
-    const packet=JSON.stringify({type:'snapshot',serverTime:serverStep/60,epoch:r.epoch,snapshot:r.race.snapshot()});
-    for(const s of r.members.values())if(s.readyState===WebSocket.OPEN&&s.bufferedAmount<150000)s.send(packet);
+    const resting=['grid','ended'].includes(r.race.status);
+    if(online&&resting&&r.lastRestStep!==undefined&&serverStep-r.lastRestStep<60)continue;
+    if(resting)r.lastRestStep=serverStep;else r.lastRestStep=undefined;
+    const snapshot=r.race.snapshot(),packet=JSON.stringify({type:'snapshot',serverTime:serverStep/60,step:serverStep,epoch:r.epoch,compact:online,snapshot:online?packSnapshot(snapshot):snapshot});
+    for(const s of r.members.values())if(s.readyState===WebSocket.OPEN&&s.bufferedAmount<(online?12000:150000)&&(!s.motionAck||s.pendingFrames.length<3)){if(s.motionAck)s.pendingFrames.push(serverStep);s.lastSentStep=serverStep;s.send(packet);}
    }
   }
  },8);
@@ -87,7 +93,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
   const roomTtlMs=config.roomTtlMs??ROOM_LIFETIME_MS;
   if(config.online&&roomTtlMs!==ROOM_LIFETIME_MS)throw Error('在线服务房间寿命必须是8小时');
   const app=await startRacingServer({port,host,maxRooms,online:config.online===true,serveLab:config.serveLab===true,publicBaseURL:config.publicBaseURL||'',roomTtlMs});
-  console.log('\n逐浪竞速 / APEX 竞速服务 v1.2.0\n\n本机打开：http://localhost:'+port+'/\n好友在浏览器输入：\n'+(host==='127.0.0.1'?'当前配置仅本机访问，请将 host 改为 0.0.0.0 后重启。':lanAddresses().map(ip=>'  http://'+ip+':'+port+'/').join('\n')||'未发现内网 IPv4，请连接 Wi-Fi 或有线网络')+'\n\n打开页面即可创建或选择房间，无需输入房间码。\n最多16人，空位由AI自动补齐。\n保持此窗口运行；按 Ctrl+C 或关闭窗口停止服务。\n');
+  console.log('\n逐浪竞速 / APEX 竞速服务 v1.2.1\n\n本机打开：http://localhost:'+port+'/\n好友在浏览器输入：\n'+(host==='127.0.0.1'?'当前配置仅本机访问，请将 host 改为 0.0.0.0 后重启。':lanAddresses().map(ip=>'  http://'+ip+':'+port+'/').join('\n')||'未发现内网 IPv4，请连接 Wi-Fi 或有线网络')+'\n\n打开页面即可创建或选择房间，无需输入房间码。\n最多16人，空位由AI自动补齐。\n保持此窗口运行；按 Ctrl+C 或关闭窗口停止服务。\n');
   if(a.includes('--open')){const url='http://localhost:'+port+'/?lan=1';if(process.platform==='win32')spawn('cmd.exe',['/d','/c','start','',url],{windowsHide:true,stdio:'ignore'}).unref();else spawn(process.platform==='darwin'?'open':'xdg-open',[url],{stdio:'ignore'}).on('error',()=>{}).unref();}
   for(const sig of ['SIGINT','SIGTERM'])process.on(sig,async()=>{await app.close();process.exit();});
  }catch(e){

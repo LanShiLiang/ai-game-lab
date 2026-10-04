@@ -1,0 +1,4 @@
+// Ordered, bounded display fields. Simulation stays full precision on the host.
+export const WIRE_FIELDS=['id','slot','bot','name','color','team','x','z','y','vy','roadVy','airborne','airCount','yaw','vx','vz','speed','steer','drifting','driftTime','nitro','energy','boostTime','miniTime','miniReady','progress','lap','index','finish','collision','resets'];
+export function packSnapshot(snapshot){return {...snapshot,time:Math.round(snapshot.time*1000)/1000,players:snapshot.players.map(p=>WIRE_FIELDS.map(k=>{const v=p[k];return typeof v==='number'&&Number.isFinite(v)?Math.round(v*(k==='yaw'?100000:1000))/(k==='yaw'?100000:1000):v;}))};}
+export function unpackSnapshot(snapshot){return {...snapshot,players:snapshot.players.map(values=>Object.fromEntries(WIRE_FIELDS.map((k,i)=>[k,values[i]])))};}

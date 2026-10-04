@@ -69,7 +69,7 @@ function frame(now){
  }requestAnimationFrame(frame);
 }
 $$('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));$$('[data-track]').forEach(b=>b.onclick=()=>setTrack(b.dataset.track));$$('[data-color]').forEach(b=>b.onclick=()=>{colorIndex=Number(b.dataset.color);$$('[data-color]').forEach(e=>e.classList.toggle('selected',e===b));if(phase==='menu'&&!room)buildPreview();});
-$('#start').onclick=startLocal;$('#create-room').onclick=()=>connectRoom(true);$('#join-room').onclick=()=>connectRoom(false);$('#leave-room').onclick=goMenu;$('#room-start').onclick=()=>net?.send({type:'start'});$('#pause-open').onclick=pauseToggle;$('#resume').onclick=pauseToggle;$('#leave').onclick=goMenu;$('#result-menu').onclick=goMenu;
+$('#start').onclick=startLocal;$('#create-room').onclick=()=>connectRoom(true);$('#join-room').onclick=()=>connectRoom(false);$('#leave-room').onclick=goMenu;$('#room-start').onclick=()=>net?.send({type:room?.status==='ended'?'restart':'start'});$('#pause-open').onclick=pauseToggle;$('#resume').onclick=pauseToggle;$('#leave').onclick=goMenu;$('#result-menu').onclick=goMenu;
 function restart(){if(net){if(room?.hostId!==localId){toast('等待房主重新发车');return;}keys.clear();touch.clear();net.send({type:'restart'});$('#results').hidden=true;$('#pause').hidden=true;paused=false;lastResult='';lastCountdown='';audio.start().catch(()=>{});$('#touch-controls').hidden=!isTouch;view.camReady=false;}else startLocal();}
 $('#restart').onclick=restart;$('#result-restart').onclick=restart;$('#camera').onclick=()=>{view.cameraMode=(view.cameraMode+1)%2;view.camReady=false;};
 $('#settings-open').onclick=()=>modal('settings',true);$('#help-open').onclick=()=>modal('help',true);$$('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
