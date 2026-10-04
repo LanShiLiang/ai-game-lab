@@ -5,11 +5,40 @@
     "subtitle": "Orbit Dash",
     "description": "守住你的轨道。躲开陨石、收集能量，在星环上坚持 45 秒。",
     "category": "街机",
-    "tags": ["反应", "生存", "太空"],
-    "controls": ["键盘", "触控"],
+    "tags": [
+      "反应",
+      "生存",
+      "太空"
+    ],
+    "controls": [
+      "键盘",
+      "触控"
+    ],
     "entry": "games/orbit-dash/index.html",
     "cover": "games/orbit-dash/cover.svg",
     "accent": "#3554df",
+    "featured": false
+  },
+  {
+    "id": "apex-rush",
+    "title": "逐浪竞速",
+    "subtitle": "APEX Racing",
+    "description": "海滨与十一城街区，3D漂移氮气竞速。人机即玩、在线房间与16人组队。",
+    "category": "竞速",
+    "tags": [
+      "3D",
+      "漂移",
+      "人机",
+      "在线房间",
+      "局域网"
+    ],
+    "controls": [
+      "键盘",
+      "触屏"
+    ],
+    "entry": "games/apex-rush/index.html",
+    "cover": "games/apex-rush/cover.svg",
+    "accent": "#14aabb",
     "featured": true
   }
 ]

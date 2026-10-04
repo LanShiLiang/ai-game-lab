@@ -124,3 +124,9 @@ ai-game-lab/
 - 游戏成功/失败结算采用受控碰撞和时间状态验证，没有执行完整的人工 45 秒游玩或实体触屏设备测试。
 - 在临时副本中验证新游戏生成与注册，重复 id 被拒绝且清单保持不变。正式项目仍只包含「轨道闪避」。
 - 浏览器记录与截图位于 `artifacts/`（Git 忽略）。
+
+## 逐浪竞速与在线发布
+
+[游戏大厅](https://lslzqco.cn/ai-game-lab/) · [逐浪竞速](https://lslzqco.cn/ai-game-lab/games/apex-rush/) · [独立源码仓库](https://github.com/LanShiLiang/apex-rush)。
+
+逐浪竞速提供人机、局域网与在线模式，在线最多3房间、每间创建8小时后销毁，16人个人/组队与AI补位。只有这款经过审查的游戏开放 iframe 同源模块访问；其他作品保留脚本沙盒。在线服务启动及回滚说明见 docs/online-deployment.md。原有静态小游戏继续无需后端。

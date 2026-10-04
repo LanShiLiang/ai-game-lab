@@ -56,7 +56,8 @@ function mountGame(game) {
   $('#player-status').textContent = '正在打开游戏…';
   iframe = el('iframe', 'game-frame');
   iframe.title = `${game.title}游戏画面`;
-  iframe.setAttribute('sandbox', 'allow-scripts');
+  iframe.setAttribute('sandbox', game.id === 'apex-rush' ? 'allow-scripts allow-same-origin' : 'allow-scripts');
+  iframe.setAttribute('allow', 'fullscreen');
   iframe.setAttribute('referrerpolicy', 'no-referrer');
   iframe.src = `./${game.entry}`;
   iframe.addEventListener('load', () => {

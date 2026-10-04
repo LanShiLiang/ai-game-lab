@@ -4,12 +4,18 @@
   "private": true,
   "description": "A lightweight home for AI-made JavaScript game demos.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs --preview",
     "check": "node scripts/check.mjs && node --test",
-    "new:game": "node scripts/new-game.mjs"
+    "new:game": "node scripts/new-game.mjs",
+    "lan:racing": "node scripts/racing-server.mjs --open"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
   }
 }
