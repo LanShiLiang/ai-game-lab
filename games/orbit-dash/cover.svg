@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+  <defs><radialGradient id="sky"><stop stop-color="#263c72"/><stop offset="1" stop-color="#101b34"/></radialGradient><radialGradient id="sun"><stop stop-color="#ffe8aa"/><stop offset="1" stop-color="#f4c85f"/></radialGradient></defs>
+  <rect width="640" height="480" fill="url(#sky)"/>
+  <g fill="#92a5d9"><circle cx="64" cy="55" r="2"/><circle cx="126" cy="179" r="1.5"/><circle cx="544" cy="95" r="2"/><circle cx="497" cy="360" r="1.5"/><circle cx="90" cy="372" r="1.5"/><circle cx="569" cy="268" r="1.5"/><circle cx="449" cy="40" r="1"/><circle cx="234" cy="51" r="1"/><circle cx="162" cy="426" r="2"/><circle cx="409" cy="437" r="1"/></g>
+  <g fill="none" stroke="#6683ca"><circle cx="320" cy="240" r="86" opacity=".25"/><circle cx="320" cy="240" r="142" opacity=".65" stroke-width="1.5"/><circle cx="320" cy="240" r="194" stroke-dasharray="4 9" opacity=".3"/><ellipse cx="320" cy="240" rx="245" ry="211" transform="rotate(-22 320 240)" opacity=".1"/></g>
+  <circle cx="320" cy="240" r="54" fill="#f4c85f" opacity=".06"/><circle cx="320" cy="240" r="38" fill="#f4c85f" opacity=".12"/><circle cx="320" cy="240" r="23" fill="url(#sun)"/><path d="M305 235q14-14 29 0" stroke="#fff4cd" stroke-width="3" fill="none" opacity=".6"/>
+  <path d="M354 102a142 142 0 0 1 102 95" stroke="#9de2c2" stroke-width="4" fill="none" opacity=".25"/>
+  <g transform="translate(455 196) rotate(70)"><path d="M0-18L13 12 0 6-13 12Z" fill="#9de2c2"/><path d="M0 10L5 23 0 19-5 23Z" fill="#ff806c"/><circle cy="-1" r="3" fill="#172238"/></g>
+  <g fill="#ff806c"><path d="M164 87l14-9 15 9 3 18-14 11-19-9z"/><path d="M475 297l11-5 11 10-3 13-16 2-8-10z"/><path d="M212 342l12-3 10 11-6 12-14-1-7-9z"/></g>
+  <g stroke="#ff806c" fill="none" opacity=".35" stroke-width="2"><path d="M154 78l-17-15m21 8l-9-17M507 319l16 12m-23-3l8 11"/></g>
+  <g fill="#f4c85f"><path d="M315 99l7 10-7 10-7-10z"/><path d="M179 245l7 10-7 10-7-10z"/></g>
+  <g font-family="Consolas,monospace" font-size="10" fill="#97abd8" letter-spacing="2"><text x="28" y="32">ORBIT / 045</text><text x="28" y="452">KEEP YOUR WORLD IN MOTION</text></g>
+</svg>

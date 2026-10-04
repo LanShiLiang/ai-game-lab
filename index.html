@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#edf0fa">
+    <meta name="description" content="AI Game Lab：把 AI 的灵感做成可玩的 JavaScript 游戏。">
+    <title>AI Game Lab · 把灵感玩成现实</title>
+    <link rel="icon" href="./src/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./src/styles.css">
+    <script type="module" src="./src/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header">
+      <a class="brand" href="#/" aria-label="AI Game Lab 首页">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span>AI GAME <strong>LAB</strong><small>灵感的游乐场</small></span>
+      </a>
+      <nav aria-label="主导航"><a href="#/" class="nav-link">游戏大厅</a><a href="#/guide" class="nav-link">创作指南 <span aria-hidden="true">↗</span></a></nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="home-view">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span> SMALL GAMES. BIG IDEAS.</div>
+            <h1 id="hero-title">把灵感，<br><span>玩成现实。</span></h1>
+            <p class="hero-description">这里装着 AI 和人一起造的小世界。<br>没有下载，挑一个，马上开玩。</p>
+            <a class="button primary" href="#/collection">探索游戏 <span aria-hidden="true">↓</span></a>
+            <div class="hero-footnote"><span aria-hidden="true">✳</span> 每个 demo，都是一次新实验。</div>
+          </div>
+          <div class="hero-exhibit">
+            <div class="exhibit-heading"><span>本期实验 / NOW PLAYING</span><span class="exhibit-dot" aria-hidden="true"></span></div>
+            <div class="orbit-window">
+              <img id="featured-cover" src="./games/orbit-dash/cover.svg" alt="星环上的飞船、陨石和能量光点" width="640" height="480" fetchpriority="high">
+              <span class="orbit-stamp" aria-hidden="true">PRESS<br>PLAY ↗</span>
+            </div>
+            <div class="exhibit-caption"><div><span class="micro">ARCADE EXPERIMENT</span><h2 id="featured-title">轨道闪避</h2><p id="featured-description">守住你的轨道，在星环上坚持 45 秒。</p></div><button id="featured-play" class="play-circle" disabled aria-label="开始轨道闪避"><span aria-hidden="true">▶</span></button></div>
+          </div>
+        </section>
+        <section class="collection" id="collection" aria-labelledby="collection-title">
+          <div class="section-heading"><div><span class="micro">THE COLLECTION</span><h2 id="collection-title">挑一个世界，进去玩。</h2></div><span class="game-count" id="game-count">正在载入…</span></div>
+          <div class="collection-tools"><div class="filters" id="filters" role="group" aria-label="游戏分类"></div><label class="search"><span aria-hidden="true">⌕</span><input id="game-search" type="search" placeholder="搜索游戏、标签…" aria-label="搜索游戏或标签" autocomplete="off"></label></div>
+          <p id="catalog-status" class="catalog-status" role="status">正在读取游戏清单…</p>
+          <button id="retry-catalog" class="button secondary" hidden>重新读取</button>
+          <div class="game-grid" id="game-grid"></div>
+          <p id="empty-state" class="empty-state" hidden>暂时没有找到这个游戏。试试其他名字或分类。</p>
+        </section>
+        <section class="maker" id="guide" aria-labelledby="maker-title">
+          <div class="maker-symbol" aria-hidden="true">+</div>
+          <div class="maker-copy"><span class="micro">YOUR NEXT EXPERIMENT</span><h2 id="maker-title">下一款，由你定义。</h2><p>一个想法，一点 JavaScript，一个新的可玩世界。</p></div>
+          <details class="maker-guide"><summary>如何加入新游戏 <span aria-hidden="true">↗</span></summary><div><p>在项目目录运行：</p><code>npm run new:game -- my-game "我的游戏"</code><p>在 <code>games/my-game/</code> 中修改游戏，在 <code>games.json</code> 中更新名字、介绍和封面。详细步骤见项目中文 README。</p></div></details>
+        </section>
+      </div>
+      <section id="player-view" class="player-view" aria-labelledby="player-title" hidden>
+        <div class="player-bar"><a class="back-link" href="#/">← 返回游戏大厅</a><button id="reload-game" class="button secondary small">重新载入</button></div>
+        <div class="player-heading"><div><span class="micro" id="player-category">GAME EXPERIMENT</span><h1 id="player-title" tabindex="-1"></h1><p id="player-description"></p></div><div id="player-controls" class="tags"></div></div>
+        <p id="player-status" class="player-status" role="status">正在打开游戏…</p>
+        <div id="game-stage" class="game-stage"></div>
+      </section>
+      <noscript><p class="empty-state">请开启 JavaScript 来查看和启动游戏。</p></noscript>
+    </main>
+    <footer class="site-footer"><span>AI GAME LAB <span class="footer-star" aria-hidden="true">✳</span> 从一个小想法开始。</span><span>Made to be played.</span></footer>
+  </body>
+</html>

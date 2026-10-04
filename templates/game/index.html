@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>新游戏 · __GAME_ID__</title>
+    <link rel="stylesheet" href="./style.css">
+    <script defer src="./game.js"></script>
+  </head>
+  <body>
+    <main>
+      <span class="eyebrow">NEW EXPERIMENT</span>
+      <h1>点击，收集灵感。</h1>
+      <p>30 秒内尽量多地点击目标。把这个小实验改造成你的游戏。</p>
+      <div class="hud"><span>得分 <output id="score">0</output></span><span>时间 <output id="time">30</output>s</span></div>
+      <div id="arena"><button id="target" aria-label="点击目标，增加一分" disabled>+</button></div>
+      <div class="actions"><button id="start">开始游戏</button><button id="pause" disabled>暂停</button></div>
+      <p id="status" role="status">准备开始。</p>
+    </main>
+  </body>
+</html>
