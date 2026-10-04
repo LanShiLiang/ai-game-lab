@@ -11,9 +11,10 @@
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs --preview",
-    "check": "node scripts/check.mjs && node --test",
+    "check": "node scripts/check.mjs && node scripts/test.mjs",
     "new:game": "node scripts/new-game.mjs",
-    "lan:racing": "node scripts/racing-server.mjs --open"
+    "lan:racing": "node scripts/racing-server.mjs --open",
+    "lan:fps": "node scripts/lan-server.mjs"
   },
   "dependencies": {
     "ws": "8.22.0"

@@ -33,3 +33,9 @@ Node.js 20+，先运行 npm ci，再运行 npm start。Windows也可以双击「
 ## 验收
 
 必须验证公开HTTPS页面、游戏资源、真实WebSocket建房/加入/发车、3间上限和8小时配置。8小时寿命由可控时钟边界测试和缩短测试计时器验证，不声称人工等待8小时。公网试玩使用真实浏览器按键。
+
+## Transport Ship
+
+Public FPS: https://lslzqco.cn/ai-game-lab/games/freight-fire/
+
+Standalone source: https://github.com/LanShiLiang/freight-fire . The public static build supports local bot matches; LAN hosting remains available in the source project with npm run lan:fps. Both scope levels now use 70% of their former magnification. Release copies use data-static=true without changing local LAN behavior.

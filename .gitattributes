@@ -4,3 +4,5 @@
 *.mjs text eol=lf
 *.yml text eol=lf
 *.cmd text eol=crlf
+# FPS models, metadata and textures are locked by exact source bytes.
+games/freight-fire/** -text -eol

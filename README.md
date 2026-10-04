@@ -130,3 +130,9 @@ ai-game-lab/
 [游戏大厅](https://lslzqco.cn/ai-game-lab/) · [逐浪竞速](https://lslzqco.cn/ai-game-lab/games/apex-rush/) · [独立源码仓库](https://github.com/LanShiLiang/apex-rush)。
 
 逐浪竞速提供人机、局域网与在线模式，在线最多3房间、每间创建8小时后销毁，16人个人/组队与AI补位。只有这款经过审查的游戏开放 iframe 同源模块访问；其他作品保留脚本沙盒。在线服务启动及回滚说明见 docs/online-deployment.md。原有静态小游戏继续无需后端。
+
+## 运输船
+
+[在线试玩](https://lslzqco.cn/ai-game-lab/games/freight-fire/) · [独立源码](https://github.com/LanShiLiang/freight-fire)
+
+经典运输船人机对战、CS2 配套枪械手臂与角色动画。M4A1-S 金蛇缠绕、AK-47 火蛇；两档狙击放大倍率降低30%。本地可通过 `npm run lan:fps` 开启 4v4 / 8v8 局域网，详情见 [FPS 文档](docs/freight-fire.md)。

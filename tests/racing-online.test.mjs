@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {gzipSync} from 'node:zlib';
 import {WebSocket} from 'ws';
 import {startRacingServer,ONLINE_ROOM_LIMIT,ROOM_LIFETIME_MS} from '../scripts/racing-server.mjs';
 import {racingServiceBase,remainingTime} from '../games/apex-rush/config.js';
@@ -30,3 +34,21 @@ test('prefix-safe endpoint and countdown',()=>{
  assert.equal(remainingTime(28800000,0),'08:00:00');assert.equal(remainingTime(123,124),'00:00:00');
 });
 test('lab static serving preserves private-file boundary',async()=>{const app=await startRacingServer({port:0,host:'127.0.0.1',online:true,serveLab:true}),base='http://127.0.0.1:'+app.server.address().port;try{assert.equal((await fetch(base+'/')).status,200);assert.equal((await fetch(base+'/games/orbit-dash/')).status,200);for(const p of ['/package.json','/racing-online.config.json','/scripts/racing-server.mjs','/.git/config','/games/apex-rush/%2e%2e/%2e%2e/.env'])assert.equal((await fetch(base+p)).status,404);}finally{await app.close();}});
+test('lab serves FPS models, textures and audio without exposing server files',async()=>{
+ const app=await startRacingServer({port:0,host:'127.0.0.1',online:true,serveLab:true}),base='http://127.0.0.1:'+app.server.address().port;
+ try{
+  for(const [file,mime] of [['index.html','text/html'],['assets/viewmodel-cs2/m4a1-golden-coil.glb','model/gltf-binary'],['assets/viewmodel-cs2/ak47-fire-serpent.webp','image/webp'],['assets/audio/cs2/ak47_01.mp3','audio/mpeg'],['assets/viewmodel-cs2/SOURCES.md','text/plain'],['vendor/LICENSE','text/plain']]){
+   const response=await fetch(base+'/games/freight-fire/'+file);assert.equal(response.status,200,file);assert.ok(response.headers.get('content-type').startsWith(mime),file);assert.ok((await response.arrayBuffer()).byteLength>0);
+  }
+  for(const file of ['/scripts/lan-server.mjs','/games/freight-fire/.env','/games/freight-fire/../../package.json'])assert.equal((await fetch(base+file)).status,404);
+ }finally{await app.close();}
+});
+test('precompressed static assets preserve original type and identity fallback',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'lab-static-')),source='export const greeting="运输船";\n'.repeat(200);
+ await mkdir(path.join(root,'games/freight-fire'),{recursive:true});await writeFile(path.join(root,'games/freight-fire/game.js'),source);await writeFile(path.join(root,'games/freight-fire/game.js.gz'),gzipSync(source));
+ const app=await startRacingServer({root,port:0,host:'127.0.0.1',serveLab:true}),base='http://127.0.0.1:'+app.server.address().port;
+ try{
+  const compressed=await fetch(base+'/games/freight-fire/game.js',{headers:{'accept-encoding':'gzip'}});assert.equal(compressed.status,200);assert.equal(compressed.headers.get('content-encoding'),'gzip');assert.equal(compressed.headers.get('content-type'),'text/javascript; charset=utf-8');assert.equal(await compressed.text(),source);
+  const plain=await fetch(base+'/games/freight-fire/game.js',{headers:{'accept-encoding':'gzip;q=0, identity'}});assert.equal(plain.headers.get('content-encoding'),null);assert.equal(await plain.text(),source);assert.equal((await fetch(base+'/games/freight-fire/game.js.gz')).status,404);
+ }finally{await app.close();assert.equal(path.dirname(path.resolve(root)),path.resolve(tmpdir()));assert.ok(path.basename(root).startsWith('lab-static-'));await rm(root,{recursive:true,force:true});}
+});
