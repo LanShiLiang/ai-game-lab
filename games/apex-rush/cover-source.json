@@ -1,0 +1,44 @@
+{
+  "game": "apex-rush",
+  "title": "逐浪竞速",
+  "assetKind": "Original promotional cover artwork; not a gameplay screenshot",
+  "generator": "Built-in image_gen tool",
+  "createdDate": "2026-10-05",
+  "prompts": [
+    {
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept.\nAsset type: original cover artwork for an independent browser 3D arcade racing game called 逐浪竞速. This is promotional key art, NOT a real gameplay screenshot.\nPrimary request: Create one polished landscape game-cover illustration, with a 1.8:1 composition (approximately 1440 by 800), evoking a bright seaside drift race. No words of any kind.\nScene/backdrop: A broad sweeping asphalt curve beside a turquoise sea and pale sand, tropical palm trees, white low safety barriers and alternating cyan-white curbs. A small white coastal building with a terracotta roof sits well back. Layered distant coastal hills, airy blue sky.\nSubject: One original brand-free coral-orange sports coupe in a clear front three-quarter view, dynamically drifting through the curve. Geometric angular body, dark windows, sporty black wheels and rear wing, visually based on an approachable low-poly arcade racer, not any existing branded car. The entire car must be visible and recognizable at thumbnail size. Include a small amount of pale tire smoke, curved dark skid traces on the road, and short cyan nitro streaks trailing naturally behind the car. No other dominant vehicles.\nStyle/medium: Premium art-directed stylized 3D illustration with tactile asphalt, subtly shaded angular car body, warm glossy paint, clean forms and beautiful soft cinematic sunlight; polished and detailed enough for a contemporary game gallery, while retaining an indie low-poly racing character rather than photographic realism.\nComposition/framing: Wide landscape, a low camera positioned outside the turn. Put the car across the middle 60% of the canvas, low enough to feel close but fully inside the central 70% safe area. Keep the upper-left small corner mostly airy sky for an existing category badge, and the bottom-right small corner quiet road for an existing arrow button. The road's curve leads from foreground to the distant coast, creating depth and speed. Make the silhouette, wheels and direction of travel immediately legible.\nLighting/mood: Warm late-afternoon sunshine, lively summer feel, blue sea highlights, gentle volumetric atmosphere, restrained speed blur in the background only; the car is crisp.\nColor palette: Coral orange as the hero, turquoise/cyan sea and curbs, deep teal asphalt shadows, warm sandy cream, natural muted green palms.\nConstraints: Original game key art. No text, no letters, no typography, no logos, no watermarks, no interface, no gauges, no fake screenshot HUD. Do not crop off the car or overfill the frame with smoke. No real car marque or recognizable branded car design."
+    },
+    {
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit.\nAsset type: original promotional key art for an indie low-poly seaside racing game, NOT a screenshot.\nEdit target: the provided racing illustration. Preserve the beautiful seaside road composition, orange hero-car placement, blue sea, bright sky, palm backdrop, road markings, drift smoke and cyan boost trail.\nChange only the car's design and its rendering style: replace the exotic wedge supercar with a unique original compact, boxier retro-modern arcade sport coupe. It must have a more upright windshield and roof, short square-ish nose, broad rectangular dark front grille, simple paired narrow rectangular headlights, clean orange body panels, visibly stylized polygon surfaces, black five-spoke wheels, modest black rear wing, and dark windows. It should look like a refined version of an independent low-poly arcade game car, with attractive sophisticated lighting, not a real photographed car. Entire car remains visible in the same location and framing. Do not recreate any real automobile make or distinctive famous vehicle design.\nRemove the tiny emblem from the hood entirely: the hood has only plain orange paint, no badge, symbol, writing or logo. No symbols anywhere on the car.\nConstraints: Keep the warm sunset-blue seaside color harmony and tasteful detailed game-art environment. Keep a landscape composition near 1.8:1, no text, UI, watermark, brand, logos or number plates. The result is polished ORIGINAL cover artwork with a clearly stylized car, not photorealism."
+    }
+  ],
+  "source": {
+    "width": 1681,
+    "height": 936,
+    "bytes": 2106186,
+    "sha256": "854d5a7bee45bb09505fce9e6465231355149cedc7ea6c1918303cef32f27368"
+  },
+  "output": {
+    "path": "games/apex-rush/cover.webp",
+    "width": 1440,
+    "height": 800,
+    "bytes": 195288,
+    "sha256": "55ce5ad01a4bca1e7a0ab80d4810d2e60734ce80303a7945f524b20a9527e98a"
+  },
+  "integration": {
+    "operations": [
+      "center crop/resize from 1681x936 to 1440x800",
+      "RGB WebP quality 88, method 6"
+    ],
+    "creativeEdits": "All artwork and car-design edits made by image_gen; integration only resizes and encodes."
+  },
+  "qualityCheck": {
+    "subject": "Orange generic angular sport coupe fully visible, sea/palms/curve legible, central safe area preserved",
+    "branding": "No text, vehicle marque or hood badge",
+    "thumbnail": "Car remains dominant and distinct against warm teal-blue environment",
+    "corners": "Airy top-left sky for category badge, quiet bottom-right curb/road for arrow",
+    "reviewedOutput": true
+  }
+}

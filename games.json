@@ -36,7 +36,7 @@
       "触屏"
     ],
     "entry": "games/freight-fire/index.html",
-    "cover": "games/freight-fire/cover.svg",
+    "cover": "games/freight-fire/cover.webp",
     "accent": "#496b7b",
     "featured": false
   },
@@ -58,7 +58,7 @@
       "触屏"
     ],
     "entry": "games/apex-rush/index.html",
-    "cover": "games/apex-rush/cover.svg",
+    "cover": "games/apex-rush/cover.webp",
     "accent": "#14aabb",
     "featured": true
   }
