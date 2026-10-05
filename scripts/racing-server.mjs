@@ -22,7 +22,7 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
  if(!Number.isFinite(roomTtlMs)||roomTtlMs<=0||roomTtlMs>ROOM_LIFETIME_MS)throw Error('Room lifetime cannot exceed 8 hours');
  if(online)maxRooms=Math.min(maxRooms,ONLINE_ROOM_LIMIT);
  if(publicBaseURL){const u=new URL(publicBaseURL);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw Error('Invalid public URL');publicBaseURL=u.href.replace(/\/$/,'');}
- const base=await realpath(root),rooms=new Map();let actualPort=port,closed=false,serverStep=0;
+ const base=await realpath(root),rooms=new Map(),staticValidators=new Map();let actualPort=port,closed=false,serverStep=0;
  const send=(s,p)=>{if(s.readyState===WebSocket.OPEN&&s.bufferedAmount<150000)s.send(JSON.stringify(p));},fail=(s,message)=>send(s,{type:'error',message});
  const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
  const resolveFile=url=>{if(!serveLab)return resolveRacingFile(base,url);let p;try{p=decodeURIComponent(url.split('?')[0]);}catch{return null;}if(p==='/')p='/index.html';if(p.endsWith('/'))p+='index.html';if(/[\\\0]/.test(p)||p.split('/').some(s=>s.startsWith('.')&&s!==''))return null;if(!['/index.html','/games.json','/LICENSE','/THIRD_PARTY_NOTICES.md'].includes(p)&&!['/src/','/games/apex-rush/','/games/orbit-dash/','/games/freight-fire/','/licenses/'].some(prefix=>p.startsWith(prefix)))return null;const f=path.resolve(base,'.'+p),rel=path.relative(base,f);return rel.startsWith('..')||path.isAbsolute(rel)||!MIME[path.extname(f)]?null:f;};
@@ -32,11 +32,25 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
   if(req.url.split('?')[0]==='/api/racing/health'){json(res,200,{ok:true,protocol:1,version:'1.2.1',maxPlayers:16,maxRooms,roomTtlMs,snapshotHz:online?12:20,serverNow:now(),online,rooms:rooms.size,port:actualPort,addresses:online?[]:lanAddresses()});return;}
   if(req.url.split('?')[0]==='/api/racing/rooms'){json(res,200,{maxRooms,roomTtlMs,serverNow:now(),rooms:[...rooms.values()].map(r=>{const info=roomInfo(r);return {roomId:info.roomId,createdAt:r.createdAt,expiresAt:r.expiresAt,hostName:info.players.find(p=>p.id===info.hostId)?.name||'车手',track:info.track,mode:info.mode,laps:info.laps,humanCount:info.humanCount,count:info.count,status:info.status};})});return;}
   const f=resolveFile(req.url);if(!f){json(res,404,{error:'Not found'});return;}try{
-   const r=await realpath(f),rel=path.relative(base,r);if(rel.startsWith('..')||path.isAbsolute(rel)||!resolveFile('/'+rel.split(path.sep).join('/'))||!(await stat(r)).isFile())throw Error();
-   let file=r,encoding=null;const gzip=/(?:^|,)\s*gzip(?:\s*;\s*q=([\d.]+))?\s*(?:,|$)/i.exec(req.headers['accept-encoding']||'');
+   const r=await realpath(f),rel=path.relative(base,r),sourceStat=await stat(r);if(rel.startsWith('..')||path.isAbsolute(rel)||!resolveFile('/'+rel.split(path.sep).join('/'))||!sourceStat.isFile())throw Error();
+   let file=r,fileStat=sourceStat,encoding=null;const gzip=/(?:^|,)\s*gzip(?:\s*;\s*q=([\d.]+))?\s*(?:,|$)/i.exec(req.headers['accept-encoding']||'');
    // Optional precompressed release files save bandwidth without per-request compression.
-   if(gzip&&Number(gzip[1]??1)>0){try{const packed=await realpath(r+'.gz');if(packed===r+'.gz'&&(await stat(packed)).isFile()){file=packed;encoding='gzip';}}catch{}}
-   const b=await readFile(file);res.writeHead(200,{'Content-Type':MIME[path.extname(r)],'Content-Length':b.length,'Cache-Control':'no-cache','Vary':'Accept-Encoding',...(encoding?{'Content-Encoding':encoding}:{}),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});res.end(req.method==='HEAD'?undefined:b);
+   if(gzip&&Number(gzip[1]??1)>0){try{const packed=await realpath(r+'.gz'),packedStat=await stat(packed);if(packed===r+'.gz'&&packedStat.isFile()){file=packed;fileStat=packedStat;encoding='gzip';}}catch{}}
+   // Revalidate each request so a new release is immediately visible, while a
+   // refresh of the same release can reuse its large models and audio files.
+   // These weak validators use file metadata; no model is read or hashed for
+   // HEAD/304. Each encoded representation has its own validator.
+   const version=[sourceStat.size,sourceStat.mtimeMs,sourceStat.ino,fileStat.size,fileStat.mtimeMs,fileStat.ino,encoding||'identity'].join(':');
+   let cached=staticValidators.get(file);
+   if(cached?.version!==version){const modified=Math.max(sourceStat.mtimeMs,fileStat.mtimeMs);cached={version,etag:'W/"'+[sourceStat.size,sourceStat.mtimeMs,sourceStat.ino,fileStat.size,fileStat.mtimeMs,fileStat.ino].map(n=>n.toString(16)).join('-')+'-'+(encoding?'gz':'id')+'"',modified:Math.floor(modified/1000)*1000,lastModified:new Date(modified).toUTCString()};staticValidators.set(file,cached);}
+   const headers={'Content-Type':MIME[path.extname(r)],'Cache-Control':'no-cache','Vary':'Accept-Encoding','ETag':cached.etag,'Last-Modified':cached.lastModified,...(encoding?{'Content-Encoding':encoding}:{}),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
+   const ifNoneMatch=req.headers['if-none-match'],ifModifiedSince=req.headers['if-modified-since'];
+   // If-None-Match takes precedence over a date validator, including when its
+   // value does not match. GET/HEAD use the required weak comparison.
+   const unchanged=ifNoneMatch!==undefined?String(ifNoneMatch).split(',').some(tag=>tag.trim()==='*'||tag.trim().replace(/^W\//,'')===cached.etag.replace(/^W\//,'')):ifModifiedSince!==undefined&&Number.isFinite(Date.parse(ifModifiedSince))&&Date.parse(ifModifiedSince)>=cached.modified;
+   if(unchanged){res.writeHead(304,headers);res.end();return;}
+   if(req.method==='HEAD'){res.writeHead(200,{...headers,'Content-Length':fileStat.size});res.end();return;}
+   const b=await readFile(file);res.writeHead(200,{...headers,'Content-Length':b.length});res.end(b);
   }catch{json(res,404,{error:'Not found'});}
  });
  server.requestTimeout=10000;server.headersTimeout=10000;

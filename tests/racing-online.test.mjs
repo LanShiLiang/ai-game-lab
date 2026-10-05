@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,utimes,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {gzipSync} from 'node:zlib';
@@ -50,5 +50,39 @@ test('precompressed static assets preserve original type and identity fallback',
  try{
   const compressed=await fetch(base+'/games/freight-fire/game.js',{headers:{'accept-encoding':'gzip'}});assert.equal(compressed.status,200);assert.equal(compressed.headers.get('content-encoding'),'gzip');assert.equal(compressed.headers.get('content-type'),'text/javascript; charset=utf-8');assert.equal(await compressed.text(),source);
   const plain=await fetch(base+'/games/freight-fire/game.js',{headers:{'accept-encoding':'gzip;q=0, identity'}});assert.equal(plain.headers.get('content-encoding'),null);assert.equal(await plain.text(),source);assert.equal((await fetch(base+'/games/freight-fire/game.js.gz')).status,404);
+ }finally{await app.close();assert.equal(path.dirname(path.resolve(root)),path.resolve(tmpdir()));assert.ok(path.basename(root).startsWith('lab-static-'));await rm(root,{recursive:true,force:true});}
+});
+test('static validators reuse unchanged identity/gzip files and preserve conditional request precedence',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'lab-static-')),file=path.join(root,'games/freight-fire/game.js'),source='export const greeting="运输船";\n'.repeat(200),packed=gzipSync(source),modified=new Date('2020-01-02T03:04:05Z');
+ await mkdir(path.dirname(file),{recursive:true});await writeFile(file,source);await writeFile(file+'.gz',packed);await utimes(file,modified,modified);await utimes(file+'.gz',modified,modified);
+ const app=await startRacingServer({root,port:0,host:'127.0.0.1',serveLab:true}),base='http://127.0.0.1:'+app.server.address().port,url=base+'/games/freight-fire/game.js';
+ try{
+  const plain=await fetch(url,{headers:{'accept-encoding':'identity'}}),plainTag=plain.headers.get('etag');assert.equal(plain.status,200);assert.match(plainTag,/^W\/".+-id"$/);assert.equal(plain.headers.get('last-modified'),modified.toUTCString());assert.equal(plain.headers.get('cache-control'),'no-cache');assert.equal(await plain.text(),source);
+  const compressed=await fetch(url,{headers:{'accept-encoding':'gzip'}}),gzipTag=compressed.headers.get('etag');assert.notEqual(gzipTag,plainTag);assert.equal(Number(compressed.headers.get('content-length')),packed.length);assert.equal(await compressed.text(),source);
+  for(const encoding of ['identity','gzip']){
+   const tag=encoding==='gzip'?gzipTag:plainTag;
+   for(const condition of [{'if-none-match':tag},{'if-none-match':'"obsolete", '+tag.replace(/^W\//,'')},{'if-none-match':'*'},{'if-modified-since':modified.toUTCString()}]){
+    const cached=await fetch(url,{headers:{'accept-encoding':encoding,...condition}});assert.equal(cached.status,304);assert.equal(cached.headers.get('etag'),tag);assert.equal(cached.headers.get('last-modified'),modified.toUTCString());assert.equal(cached.headers.get('vary'),'Accept-Encoding');assert.equal(cached.headers.get('content-encoding'),encoding==='gzip'?'gzip':null);assert.equal(cached.headers.get('content-type'),'text/javascript; charset=utf-8');assert.equal((await cached.arrayBuffer()).byteLength,0);
+   }
+  }
+  const changedTag=await fetch(url,{headers:{'accept-encoding':'identity','if-none-match':'"obsolete"','if-modified-since':modified.toUTCString()}});assert.equal(changedTag.status,200);assert.equal(await changedTag.text(),source);
+  const invalidDate=await fetch(url,{headers:{'accept-encoding':'identity','if-modified-since':'not a date'}});assert.equal(invalidDate.status,200);await invalidDate.arrayBuffer();
+  const variantMiss=await fetch(url,{headers:{'accept-encoding':'gzip','if-none-match':plainTag}});assert.equal(variantMiss.status,200);assert.equal(await variantMiss.text(),source);
+  const head=await fetch(url,{method:'HEAD',headers:{'accept-encoding':'gzip'}});assert.equal(head.status,200);assert.equal(Number(head.headers.get('content-length')),packed.length);assert.equal(head.headers.get('etag'),gzipTag);assert.equal((await head.arrayBuffer()).byteLength,0);
+  const headCached=await fetch(url,{method:'HEAD',headers:{'accept-encoding':'gzip','if-none-match':gzipTag}});assert.equal(headCached.status,304);assert.equal((await headCached.arrayBuffer()).byteLength,0);
+  for(const forbidden of ['/package.json','/scripts/racing-server.mjs','/games/freight-fire/game.js.gz','/games/freight-fire/missing.glb'])assert.equal((await fetch(base+forbidden,{headers:{'if-none-match':'*'}})).status,404);
+  const health=await fetch(base+'/api/racing/health',{headers:{'if-none-match':'*'}});assert.equal(health.status,200);assert.equal(health.headers.get('cache-control'),'no-store');assert.equal(health.headers.get('etag'),null);await health.arrayBuffer();
+ }finally{await app.close();assert.equal(path.dirname(path.resolve(root)),path.resolve(tmpdir()));assert.ok(path.basename(root).startsWith('lab-static-'));await rm(root,{recursive:true,force:true});}
+});
+test('static validator metadata invalidates updated files and removed gzip representations',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'lab-static-')),file=path.join(root,'games/freight-fire/game.js'),source='export const version=1;\n',modified=new Date('2020-01-02T03:04:05Z');
+ await mkdir(path.dirname(file),{recursive:true});await writeFile(file,source);await writeFile(file+'.gz',gzipSync(source));await utimes(file,modified,modified);await utimes(file+'.gz',modified,modified);
+ const app=await startRacingServer({root,port:0,host:'127.0.0.1',serveLab:true}),base='http://127.0.0.1:'+app.server.address().port,url=base+'/games/freight-fire/game.js';
+ try{
+  const original=await fetch(url,{headers:{'accept-encoding':'gzip'}}),oldTag=original.headers.get('etag'),oldModified=original.headers.get('last-modified');await original.arrayBuffer();
+  const updated='export const version=20;\n',nextDate=new Date('2020-01-02T03:04:07Z');await writeFile(file,updated);await writeFile(file+'.gz',gzipSync(updated));await utimes(file,nextDate,nextDate);await utimes(file+'.gz',nextDate,nextDate);
+  const current=await fetch(url,{headers:{'accept-encoding':'gzip','if-none-match':oldTag}}),newTag=current.headers.get('etag');assert.equal(current.status,200);assert.notEqual(newTag,oldTag);assert.equal(current.headers.get('last-modified'),nextDate.toUTCString());assert.equal(await current.text(),updated);
+  const dateMiss=await fetch(url,{headers:{'accept-encoding':'gzip','if-modified-since':oldModified}});assert.equal(dateMiss.status,200);assert.equal(await dateMiss.text(),updated);
+  await rm(file+'.gz');const unpacked=await fetch(url,{headers:{'accept-encoding':'gzip','if-none-match':newTag}});assert.equal(unpacked.status,200);assert.equal(unpacked.headers.get('content-encoding'),null);assert.notEqual(unpacked.headers.get('etag'),newTag);assert.equal(await unpacked.text(),updated);
  }finally{await app.close();assert.equal(path.dirname(path.resolve(root)),path.resolve(tmpdir()));assert.ok(path.basename(root).startsWith('lab-static-'));await rm(root,{recursive:true,force:true});}
 });
