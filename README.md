@@ -138,3 +138,7 @@ ai-game-lab/
 经典运输船人机对战、CS2 配套枪械手臂与角色动画。M4A1-S 社区印花集、AK-47 社区火神与港湾警戒手套 / 袖口；死亡采用有关节限制的轻量物理布娃娃，静止后冻结；两档狙击放大倍率降低30%。本地可通过 `npm run lan:fps` 开启 4v4 / 8v8 局域网，详情见 [FPS 文档](docs/freight-fire.md)。
 
 运输船与逐浪竞速大厅封面更新为原创 1440×800 WebP 宣传画，完整生成提示词与来源记录分别见两款游戏的 `cover-source.json`。
+
+## 开源许可证
+
+原创代码与项目文档采用 [MIT License](LICENSE)，允许使用、修改、分发及商业使用，分发时须保留版权声明与许可全文。第三方模型、贴图、动画、音效、地图数据及依赖保留各自的版权与许可证，具体范围见 [LICENSE-SCOPE.md](LICENSE-SCOPE.md) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。仓库公开不会把第三方游戏素材改为 MIT；投稿作品保留作者选择的原许可证。
