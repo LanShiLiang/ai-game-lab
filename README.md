@@ -131,13 +131,13 @@ ai-game-lab/
 
 逐浪竞速提供人机、局域网与在线模式，在线最多3房间、每间创建8小时后销毁，16人个人/组队与AI补位。只有这款经过审查的游戏开放 iframe 同源模块访问；其他作品保留脚本沙盒。在线服务启动及回滚说明见 docs/online-deployment.md。原有静态小游戏继续无需后端。
 
-## 运输船
+## 运输船枪战
 
 [在线试玩](https://lslzqco.cn/ai-game-lab/games/freight-fire/) · [独立源码](https://github.com/LanShiLiang/freight-fire)
 
 经典运输船人机对战、CS2 配套枪械手臂与角色动画。M4A1-S 社区印花集、AK-47 社区火神与港湾警戒手套 / 袖口；死亡采用有关节限制的轻量物理布娃娃，静止后冻结；两档狙击放大倍率降低30%。本地可通过 `npm run lan:fps` 开启 4v4 / 8v8 局域网，详情见 [FPS 文档](docs/freight-fire.md)。
 
-运输船与逐浪竞速大厅封面更新为原创 1440×800 WebP 宣传画，完整生成提示词与来源记录分别见两款游戏的 `cover-source.json`。
+运输船枪战与逐浪竞速大厅封面更新为原创 1440×800 WebP 宣传画，完整生成提示词与来源记录分别见两款游戏的 `cover-source.json`。
 
 ## 开源许可证
 

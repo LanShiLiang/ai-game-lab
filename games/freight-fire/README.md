@@ -1,4 +1,4 @@
-# 运输船 / Transport Ship
+# 运输船枪战 / Transport Ship
 
 经典端游运输船的网页 FPS 练习作品，支持保卫者 / 潜伏者、4v4 / 8v8 人机与局域网对战。保留已认可的经典地图结构和绘制材质，本轮重构人物、配套枪手、死亡视角与战斗界面。与官方游戏无关联。
 
@@ -18,7 +18,7 @@
 
 ## 开始游戏与操作
 
-从 AI Game Lab 大厅选择“运输船”，或访问 `/games/freight-fire/`。推荐 Windows Chrome / Edge，开启浏览器硬件加速。执行 `npm run dev`，打开显示的本地地址；由于 ES modules 限制，不建议直接双击 HTML。
+从 AI Game Lab 大厅选择“运输船枪战”，或访问 `/games/freight-fire/`。推荐 Windows Chrome / Edge，开启浏览器硬件加速。执行 `npm run dev`，打开显示的本地地址；由于 ES modules 限制，不建议直接双击 HTML。
 
 | 操作 | 按键 |
 | --- | --- |
@@ -72,4 +72,4 @@ Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides
 
 ## 大厅封面
 
-运输船封面使用本作品地图、角色氛围作参考，通过内置 ImageGen 生成原创宣传画，随后仅缩放和编码为 1440×800 WebP；它是宣传插画而非实机截图。生成模式、完整最终提示词、分辨率与校验记录见 `cover-source.json`，旧 SVG 继续作为页面图标。
+运输船枪战封面使用本作品地图、角色氛围作参考，通过内置 ImageGen 生成原创宣传画，随后仅缩放和编码为 1440×800 WebP；它是宣传插画而非实机截图。生成模式、完整最终提示词、分辨率与校验记录见 `cover-source.json`，旧 SVG 继续作为页面图标。

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#182a38">
-  <meta name="description" content="经典运输船网页 FPS，本地人机对战与 Windows 局域网 4v4 / 8v8。">
-  <title>运输船 · Transport Ship</title>
+  <meta name="description" content="运输船枪战：经典运输船地图网页 FPS，本地人机对战与 Windows 局域网 4v4 / 8v8。">
+  <title>运输船枪战 · Transport Ship</title>
   <link rel="icon" type="image/svg+xml" href="./cover.svg">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./boot.js"></script>
@@ -13,7 +13,7 @@
   <canvas id="arena" aria-label="3D 货轮战场"></canvas>
   <div class="vignette" aria-hidden="true"></div>
   <section id="loading" aria-labelledby="loading-title"><div class="loading-card">
-    <p class="loading-kicker">TRANSPORT SHIP / 运输船</p><h2 id="loading-title">准备登船</h2>
+    <p class="loading-kicker">TRANSPORT SHIP / 运输船枪战</p><h2 id="loading-title">准备登船</h2>
     <p id="loading-stage" role="status" aria-live="polite">连接战场脚本…</p>
     <div class="loading-progress-heading"><span>资源下载</span><strong id="loading-percent">连接中</strong></div>
     <progress id="loading-progress" max="100" aria-label="战场资源下载进度"></progress>
@@ -43,9 +43,9 @@
     <div id="performance">— FPS</div>
   </div>
   <section id="menu" class="menu-surface" aria-labelledby="game-title">
-    <div class="briefing"><div class="overline"><span class="signal"></span> FREIGHT FIRE</div><p class="operation">经典地图 · 团队竞技</p><h1 id="game-title"><span class="title-cn">运输船</span><small>TRANSPORT SHIP</small></h1><p class="intro">选择阵营，出发交战。<br>中路推进、侧翼绕行，配合队友赢下这一局。</p><div class="map-note"><div><strong>双端出生 · 多路出击</strong><p>左右出口 / 中路掩体 / 侧道高台</p></div></div><a href="../../index.html" class="back">← 运输船首页</a></div>
+    <div class="briefing"><div class="overline"><span class="signal"></span> FREIGHT FIRE</div><p class="operation">经典地图 · 团队竞技</p><h1 id="game-title"><span class="title-cn">运输船枪战</span><small>TRANSPORT SHIP</small></h1><p class="intro">选择阵营，出发交战。<br>中路推进、侧翼绕行，配合队友赢下这一局。</p><div class="map-note"><div><strong>双端出生 · 多路出击</strong><p>左右出口 / 中路掩体 / 侧道高台</p></div></div><a href="../../index.html" class="back">← 运输船枪战首页</a></div>
     <div class="setup-panel">
-      <div class="panel-heading"><span id="panel-caption">开始对战</span><small>运输船</small></div>
+      <div class="panel-heading"><span id="panel-caption">开始对战</span><small>运输船枪战</small></div>
       <div class="mode-tabs" role="group" aria-label="对战模式"><button class="selected" data-mode="offline" aria-pressed="true">人机对战</button><button data-mode="lan" aria-pressed="false">局域网好友</button></div>
       <label class="field">呼号<input id="nickname" maxlength="18" value="新兵" autocomplete="nickname"></label>
       <div class="field-row"><label class="field">编制<select id="size"><option value="4">4 v 4 · 8 人</option><option value="8">8 v 8 · 16 人</option></select></label><label class="field">目标分数<select id="goal"><option value="40">40 击杀</option><option value="80">80 击杀</option><option value="20">20 击杀</option></select></label></div>
