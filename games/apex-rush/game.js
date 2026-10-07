@@ -5,10 +5,12 @@ import {RaceAudio} from './audio.js';
 import {RaceNetwork} from './network.js';
 import {createLanLobby,isLanHost} from './lan.js';
 import {ONLINE_GAME_URL,remainingTime} from './config.js';
+import {FrameLoop} from './performance.js';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const keys=new Set(),touch=new Set(),audio=new RaceAudio();
 let view,race,snapshot,localId,trackId='beach',colorIndex=0,mode='offline',phase='menu',paused=false,net=null,room=null,last=performance.now(),accumulator=0,sendTime=0,roomClockOffset=0,lastCountdown='',lastResult='',toastTimeout,visible=true,eventUntil=0,lastNitro=1,previousModalFocus,raceEpoch=null;
 let boostTap=false,resetTap=false;
+const renderLoop=new FrameLoop(frame,()=>phase==='race'&&(!paused||net)?60:phase==='race'?5:15);
 const isTouch=matchMedia('(pointer: coarse)').matches||navigator.maxTouchPoints>0;
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>$('#toast').hidden=true,5000);}
 const lanLobby=createLanLobby({join:code=>{$('#room-code').value=code;connectRoom(false);},notice:toast,isMenu:()=>phase==='menu'});
@@ -41,16 +43,27 @@ async function connectRoom(create){
  net=n;try{await n.connect();const data={name:$('#nickname').value,color:colorIndex};if(create)n.send({type:'create',...settings(),...data});else{let code=$('#room-code').value.trim();try{code=new URL(code).searchParams.get('room')||code;}catch{}if(!/^[A-Za-z0-9_-]{12}$/.test(code))throw Error('请输入有效的12位房间码或完整邀请链接');n.send({type:'join',roomId:code,...data});}}catch(e){n.close();if(net===n)net=null;toast(e.message);}
 }
 function drawTrackCards(){for(const b of $$('[data-track]')){const t=makeTrack(b.dataset.track),a=t.samples,xs=a.map(p=>p.x),zs=a.map(p=>p.z),xmin=Math.min(...xs),zmin=Math.min(...zs),scale=Math.min(90/(Math.max(...xs)-xmin),60/(Math.max(...zs)-zmin)),d=a.filter((p,i)=>i%3===0).map((p,i)=>(i?'L':'M')+(10+(p.x-xmin)*scale).toFixed(1)+','+(8+(p.z-zmin)*scale).toFixed(1)).join(' ')+'Z';b.querySelector('svg').innerHTML='<path d="'+d+'" fill="none" stroke="#d6e9ec" stroke-width="7" stroke-linejoin="round"/><path d="'+d+'" fill="none" stroke="'+(b.dataset.track==='beach'?'#19a8b8':'#5c8395')+'" stroke-width="2" stroke-linejoin="round"/>';} }
+let mapTrack, mapBackground, mapPoint;
 function drawMap(){
- const c=$('#minimap'),ctx=c.getContext('2d'),t=view.track,a=t.samples,xs=a.map(p=>p.x),zs=a.map(p=>p.z),minX=Math.min(...xs),minZ=Math.min(...zs),scale=Math.min(204/(Math.max(...xs)-minX),162/(Math.max(...zs)-minZ)),px=x=>18+(x-minX)*scale,pz=z=>18+(z-minZ)*scale;ctx.clearRect(0,0,240,200);ctx.lineWidth=7;ctx.strokeStyle='#e7f8fc';ctx.lineJoin='round';ctx.beginPath();for(let i=0;i<a.length;i+=3){const p=a[i];if(i===0)ctx.moveTo(px(p.x),pz(p.z));else ctx.lineTo(px(p.x),pz(p.z));}ctx.closePath();ctx.stroke();for(const p of snapshot.players){ctx.beginPath();ctx.fillStyle=p.id===localId?'#ffcd50':snapshot.mode==='team'?(p.team===0?'#ff765b':'#53bdf7'):p.color;ctx.arc(px(p.x),pz(p.z),p.id===localId?5:3,0,Math.PI*2);ctx.fill();if(p.id===localId){ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke();}}$('#team-score').textContent=snapshot.mode==='team'?'红队 '+teamScores(snapshot)[0]+' : '+teamScores(snapshot)[1]+' 蓝队':'';
+ const c=$('#minimap'),ctx=c.getContext('2d'),t=view.track;
+ if(mapTrack!==t){
+  mapTrack=t;mapBackground=document.createElement('canvas');mapBackground.width=240;mapBackground.height=200;
+  const path=mapBackground.getContext('2d'),a=t.samples,xs=a.map(p=>p.x),zs=a.map(p=>p.z),minX=Math.min(...xs),minZ=Math.min(...zs),scale=Math.min(204/(Math.max(...xs)-minX),162/(Math.max(...zs)-minZ));
+  mapPoint=p=>[18+(p.x-minX)*scale,18+(p.z-minZ)*scale];path.lineWidth=7;path.strokeStyle='#e7f8fc';path.lineJoin='round';path.beginPath();
+  for(let i=0;i<a.length;i+=3){const [x,z]=mapPoint(a[i]);if(i===0)path.moveTo(x,z);else path.lineTo(x,z);}path.closePath();path.stroke();
+ }
+ ctx.clearRect(0,0,240,200);ctx.drawImage(mapBackground,0,0);
+ for(const p of snapshot.players){const [x,z]=mapPoint(p);ctx.beginPath();ctx.fillStyle=p.id===localId?'#ffcd50':snapshot.mode==='team'?(p.team===0?'#ff765b':'#53bdf7'):p.color;ctx.arc(x,z,p.id===localId?5:3,0,Math.PI*2);ctx.fill();if(p.id===localId){ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke();}}
+ const scores=snapshot.mode==='team'?teamScores(snapshot):null;$('#team-score').textContent=scores?'红队 '+scores[0]+' : '+scores[1]+' 蓝队':'';
 }
-let hudClock=0;
+
+let hudClock=0,hudFrameClock=0,leaderSignature='',lastPerformance=0;
 function hud(dt){
- const p=person();if(!p)return;hudClock+=dt;const order=snapshot.order,rank=order.indexOf(localId)+1;$('#place').textContent=String(rank).padStart(2,'0');$('#total').textContent=String(snapshot.count).padStart(2,'0');$('#track-name').textContent=view.track.name;$('#lap').textContent=p.lap;$('#lap-total').textContent=snapshot.laps;$('#race-time').textContent=formatTime(p.finish??snapshot.time);$('#speed').textContent=String(Math.round(p.speed*3.6)).padStart(3,'0');$('#gear').textContent=Math.min(6,1+Math.floor(p.speed/13))+' GEAR';$('#energy-fill').style.width=p.energy*100+'%';$('#nitro-tanks').querySelectorAll('i').forEach((e,j)=>e.classList.toggle('full',j<p.nitro));
+ hudClock+=dt;hudFrameClock+=dt;if(hudFrameClock<.05)return;hudFrameClock=0;const p=person();if(!p)return;const order=snapshot.order,rank=order.indexOf(localId)+1;$('#place').textContent=String(rank).padStart(2,'0');$('#total').textContent=String(snapshot.count).padStart(2,'0');$('#track-name').textContent=view.track.name;$('#lap').textContent=p.lap;$('#lap-total').textContent=snapshot.laps;$('#race-time').textContent=formatTime(p.finish??snapshot.time);$('#speed').textContent=String(Math.round(p.speed*3.6)).padStart(3,'0');$('#gear').textContent=Math.min(6,1+Math.floor(p.speed/13))+' GEAR';$('#energy-fill').style.width=p.energy*100+'%';$('#nitro-tanks').querySelectorAll('i').forEach((e,j)=>e.classList.toggle('full',j<p.nitro));
  $('#drive-state').textContent=p.boostTime>0?'N₂O / 氮气加速':p.miniTime>0?'BOOST / 出弯喷射':p.airborne?'AIR / 腾空':p.drifting?'DRIFT / 漂移集气':'GRIP / 抓地';$('#mini-tip').textContent=p.miniReady>0?'现在按 Space：出弯续喷':p.collision>0?'轻碰护栏 · 调整方向':p.drifting?'稳住方向，松开 Shift 出弯':'Shift + 方向键漂移集气';$('#boost-flash').style.opacity=(p.boostTime>0||p.miniTime>0)&&!view.reduce?'1':'0';
  let cd=snapshot.time<0?String(Math.ceil(-snapshot.time)):snapshot.time<.7?'GO!':'';$('#countdown').textContent=cd;if(cd&&cd!==lastCountdown)audio.beep(cd==='GO!');lastCountdown=cd;
  if(p.nitro>lastNitro){eventUntil=performance.now()+1100;$('#race-event').textContent='N₂O READY / 氮气就绪';}lastNitro=p.nitro;if(p.finish!==null&&snapshot.status!=='ended')$('#race-event').textContent='已冲线 · 等待其他车手';else if(performance.now()>eventUntil)$('#race-event').textContent='';
- if(hudClock>.14){hudClock=0;$('#leaders').replaceChildren(...order.slice(0,6).map((id,j)=>{const r=snapshot.players.find(p=>p.id===id),e=document.createElement('li');e.className=id===localId?'me':'';const rank=document.createElement('b');rank.textContent=String(j+1).padStart(2,'0');const dot=document.createElement('i');dot.style.background=snapshot.mode==='team'?(r.team===0?'#ed6e54':'#32bbdf'):r.color;const name=document.createElement('span');name.textContent=r.name;const type=document.createElement('small');type.textContent=r.finish!==null?'✓':r.bot?'AI':'YOU';e.append(rank,dot,name,type);return e;}));drawMap();}
+ if(hudClock>.14){hudClock=0;const signature=order.slice(0,6).map(id=>{const p=snapshot.players.find(p=>p.id===id);return [id,p.name,p.team,p.color,p.finish!==null,p.bot].join(':');}).join('|')+localId+snapshot.mode;if(signature!==leaderSignature){leaderSignature=signature;$('#leaders').replaceChildren(...order.slice(0,6).map((id,j)=>{const r=snapshot.players.find(p=>p.id===id),e=document.createElement('li');e.className=id===localId?'me':'';const rank=document.createElement('b');rank.textContent=String(j+1).padStart(2,'0');const dot=document.createElement('i');dot.style.background=snapshot.mode==='team'?(r.team===0?'#ed6e54':'#32bbdf'):r.color;const name=document.createElement('span');name.textContent=r.name;const type=document.createElement('small');type.textContent=r.finish!==null?'✓':r.bot?'AI':'YOU';e.append(rank,dot,name,type);return e;}));}drawMap();}
  if(snapshot.status==='ended')showResults();
 }
 function showResults(){
@@ -65,15 +78,15 @@ function frame(now){
   else if(!paused){accumulator+=dt;race.setInput(localId,input());while(accumulator>=1/60){race.tick(1/60);boostTap=false;resetTap=false;accumulator-=1/60;}snapshot=race.snapshot();}
   if(!paused||net)view.render(visualSnapshot(dt),localId,dt,false);hud(dt);audio.update(person(),!paused&&snapshot.status==='racing');
  }else{view.render(snapshot,localId,dt,true);audio.stop();}
- $('#performance').textContent=(view.stats.fps||'—')+' FPS / '+(net?(mode==='online'?'ONLINE CONNECTED':'LAN CONNECTED'):'LOCAL RACING');
- }requestAnimationFrame(frame);
+ if(now-lastPerformance>500){lastPerformance=now;$('#performance').textContent=(view.stats.fps||'—')+' FPS / '+(net?(mode==='online'?'ONLINE CONNECTED':'LAN CONNECTED'):'LOCAL RACING');}
+ }
 }
 $$('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));$$('[data-track]').forEach(b=>b.onclick=()=>setTrack(b.dataset.track));$$('[data-color]').forEach(b=>b.onclick=()=>{colorIndex=Number(b.dataset.color);$$('[data-color]').forEach(e=>e.classList.toggle('selected',e===b));if(phase==='menu'&&!room)buildPreview();});
 $('#start').onclick=startLocal;$('#create-room').onclick=()=>connectRoom(true);$('#join-room').onclick=()=>connectRoom(false);$('#leave-room').onclick=goMenu;$('#room-start').onclick=()=>net?.send({type:room?.status==='ended'?'restart':'start'});$('#pause-open').onclick=pauseToggle;$('#resume').onclick=pauseToggle;$('#leave').onclick=goMenu;$('#result-menu').onclick=goMenu;
 function restart(){if(net){if(room?.hostId!==localId){toast('等待房主重新发车');return;}keys.clear();touch.clear();net.send({type:'restart'});$('#results').hidden=true;$('#pause').hidden=true;paused=false;lastResult='';lastCountdown='';audio.start().catch(()=>{});$('#touch-controls').hidden=!isTouch;view.camReady=false;}else startLocal();}
 $('#restart').onclick=restart;$('#result-restart').onclick=restart;$('#camera').onclick=()=>{view.cameraMode=(view.cameraMode+1)%2;view.camReady=false;};
 $('#settings-open').onclick=()=>modal('settings',true);$('#help-open').onclick=()=>modal('help',true);$$('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
-$('#quality').onchange=()=>view?.setQuality($('#quality').value);$('#sound').onchange=()=>audio.setEnabled($('#sound').checked);$('#assist').onchange=()=>{if(race)race.assist=$('#assist').checked;};$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('#app').requestFullscreen();}catch{toast('当前浏览器不支持全屏；可使用浏览器的全屏菜单。');}};
+$('#quality').onchange=()=>view?.setQuality($('#quality').value);$('#sound').onchange=()=>audio.setEnabled($('#sound').checked);$('#assist').onchange=()=>{if(race)race.assist=$('#assist').checked;};$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('#app').requestFullscreen();}catch{if(window.parent!==window)window.parent.postMessage({type:'ai-game-lab:expand'},'*');else toast('当前浏览器不支持全屏；可使用浏览器的全屏菜单。');}};
 $('#copy-invite').onclick=async()=>{const v=$('#invite-link').value;try{await navigator.clipboard.writeText(v);toast('邀请链接已复制');}catch{$('#invite-link').focus();$('#invite-link').select();if(document.execCommand('copy'))toast('邀请链接已复制');else toast('请复制选中的链接发给好友');}};
 addEventListener('keydown',e=>{if(e.code==='Escape'){const opened=['settings','help'].find(id=>!$('#'+id).hidden);if(opened){modal(opened,false);return;}}
  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;
@@ -83,12 +96,19 @@ addEventListener('keydown',e=>{if(e.code==='Escape'){const opened=['settings','h
 addEventListener('keyup',e=>keys.delete(e.code));
 function clearInputs(){boostTap=false;resetTap=false;keys.clear();touch.clear();$$('[data-control]').forEach(b=>b.classList.remove('held'));if(net)net.send({type:'input',input:{}});}
 addEventListener('blur',()=>{clearInputs();if(phase==='race'&&!net&&!paused)pauseToggle();});
-document.addEventListener('visibilitychange',()=>{visible=!document.hidden;clearInputs();if(visible&&net)view.camReady=false;last=performance.now();accumulator=0;if(!visible&&phase==='race'&&!net&&!paused)pauseToggle();});
+document.addEventListener('visibilitychange',()=>{visible=!document.hidden;clearInputs();if(visible&&net)view.camReady=false;last=performance.now();accumulator=0;if(!visible){renderLoop.stop();audio.stop();if(phase==='race'&&!net&&!paused)pauseToggle();}else renderLoop.start();});
 addEventListener('message',e=>{if(e.source===window.parent&&e.data?.type==='ai-game-lab:pause'){clearInputs();if(phase==='race'&&!net&&!paused)pauseToggle();}});
 $$('[data-control]').forEach(b=>{b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);touch.add(b.dataset.control);if(b.dataset.control==='boost')boostTap=true;b.classList.add('held');audio.start().catch(()=>{});};const up=()=>{touch.delete(b.dataset.control);b.classList.remove('held');};b.onpointerup=up;b.onpointercancel=up;b.onlostpointercapture=up;});
 document.addEventListener('keydown',e=>{if(e.code!=='Tab')return;const dialog=$$('.modal').find(m=>!m.hidden);if(!dialog)return;const items=[...dialog.querySelectorAll('button:not(:disabled),input,select')].filter(e=>e.offsetParent!==null);if(!items.length)return;const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
-try{drawTrackCards();view=new RaceView($('#scene'));buildPreview();const code=new URLSearchParams(location.search).get('room');if(new URLSearchParams(location.search).has('online')||code&&!isLanHost(location.hostname))setMode('online');else if(code||new URLSearchParams(location.search).has('lan'))setMode('lan');if(code){$('#room-code').value=code;$('#room-code').closest('details').open=true;toast('好友邀请已填好，输入昵称后点击加入。');}requestAnimationFrame(frame);if(new URLSearchParams(location.search).has('qa'))window.__apex={get race(){return race;},get snapshot(){return snapshot;},get localId(){return localId;},get phase(){return phase;},get paused(){return paused;},get view(){return view;},input,net:()=>net,settings};}
+try{drawTrackCards();view=new RaceView($('#scene'));buildPreview();const code=new URLSearchParams(location.search).get('room');if(new URLSearchParams(location.search).has('online')||code&&!isLanHost(location.hostname))setMode('online');else if(code||new URLSearchParams(location.search).has('lan'))setMode('lan');if(code){$('#room-code').value=code;$('#room-code').closest('details').open=true;toast('好友邀请已填好，输入昵称后点击加入。');}renderLoop.start();if(new URLSearchParams(location.search).has('qa'))window.__apex={get race(){return race;},get snapshot(){return snapshot;},get localId(){return localId;},get phase(){return phase;},get paused(){return paused;},get view(){return view;},input,net:()=>net,settings};}
 catch(e){$('#fatal').hidden=false;$('#fatal-message').textContent=e.message;console.error(e);}
-addEventListener('pagehide',()=>{lanLobby.stop();net?.close();audio.stop();view?.dispose();},{once:true});
+addEventListener('pagehide',()=>{renderLoop.stop();lanLobby.stop();net?.close();audio.stop();view?.dispose();},{once:true});
 
 setInterval(()=>{const online=!!room?.online,stamp=Date.now()+roomClockOffset;$('#session-expiry').hidden=!online;const text=online?'房间剩余 '+remainingTime(room.expiresAt,stamp)+' · 到期自动关闭':'';$('#session-expiry').textContent=text;$('#room-lifetime').textContent=text;},1000);
+
+document.addEventListener('fullscreenchange',()=>{const full=Boolean(document.fullscreenElement);$('#fullscreen').setAttribute('aria-pressed',String(full));$('#fullscreen').setAttribute('aria-label',full?'退出全屏':'全屏游戏');});
+
+$('#race-fullscreen').onclick=$('#fullscreen').onclick;
+document.addEventListener('fullscreenchange',()=>{const full=Boolean(document.fullscreenElement);$('#race-fullscreen').textContent=full?'退出全屏':'全屏 ⛶';$('#race-fullscreen').setAttribute('aria-pressed',String(full));});
+
+addEventListener('keydown',event=>{if(event.altKey&&event.code==='Enter'&&!event.repeat){event.preventDefault();$('#fullscreen').click();}});

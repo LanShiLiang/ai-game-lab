@@ -5,6 +5,7 @@ import { makeEnvironmentV2 } from './environment-v2.js';
 import { makeCharacterV2, updateCharacterV2, characterEvent, disposeCharacterV2 } from './character-v2.js';
 import { ViewModelV2, makeWeaponV2 } from './viewmodel.js';
 import { DeathCamera } from './death-camera.js';
+import { ResolutionBudget } from './performance.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const vec = value => Array.isArray(value) ? new THREE.Vector3(...value) : new THREE.Vector3(value?.x || 0, value?.y || 0, value?.z || 0);
@@ -20,7 +21,8 @@ function nameTexture(p) {
 }
 
 export class ArenaRenderer {
-  constructor(canvas, { quality = 'medium' } = {}) {
+  constructor(canvas, { quality = 'auto' } = {}) {
+    this.resolution = new ResolutionBudget(quality);
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({canvas, antialias: true, powerPreference: 'high-performance', alpha: false});
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -67,6 +69,7 @@ export class ArenaRenderer {
     this.fpsTime = 0; this.frames = 0; this.stats = {fps:0,drawCalls:0,triangles:0};
     this.previousWeapon = ''; this.clockTime = 0; this.cameraReady = false; this.disposed = false;
     this.setQuality(quality); this.resize();
+    this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);
   }
 
   retryEnvironment() {
@@ -113,9 +116,8 @@ export class ArenaRenderer {
   }
 
   setQuality(quality) {
-    this.quality = ['low','medium','high'].includes(quality) ? quality : 'medium';
+    this.resolution.setQuality(quality); this.quality = this.resolution.quality;
     const high=this.quality==='high', low=this.quality==='low';
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? 1.7 : low ? 1 : 1.35));
     this.renderer.shadowMap.enabled=!low;
     this.sun.shadow.mapSize.set(high ? 2048 : 1536,high ? 2048 : 1536);
     if(this.sun.shadow.map){this.sun.shadow.map.dispose();this.sun.shadow.map=null;}
@@ -126,6 +128,7 @@ export class ArenaRenderer {
 
   resize() {
     const width=this.canvas.clientWidth || window.innerWidth || 1280,height=this.canvas.clientHeight || window.innerHeight || 720;
+    const ratio=this.resolution.ratio(window.devicePixelRatio,width,height);if(Math.abs(this.renderer.getPixelRatio()-ratio)>.001)this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(width,height,false);this.camera.aspect=width/height;this.camera.updateProjectionMatrix();
     if(this.viewCamera){this.viewCamera.aspect=width/height;this.viewCamera.updateProjectionMatrix();}
   }
@@ -144,6 +147,7 @@ export class ArenaRenderer {
 
   render(snapshot, localId, input = {}, dt = 1 / 60) {
     if(this.disposed)return;
+    if(this.resolution.sample(dt,Boolean(localId)&&!input.paused))this.resize();
     dt=clamp(dt||1/60,.001,.08);this.clockTime+=dt;
     const clockReset=(snapshot?.time||0)<(this.currentSnapshotTime||0)-.5,newRound=clockReset||this.roundResetPending===true;
     this.roundResetPending=false;
@@ -314,7 +318,7 @@ export class ArenaRenderer {
     object?.traverse?.(obj=>{if(obj.isMesh||obj.isLine){if(!obj.userData.sharedAsset&&!obj.isSkinnedMesh)obj.geometry?.dispose();if(!obj.userData.sharedAsset&&obj.material && !Array.isArray(obj.material) && (obj.material.isMeshBasicMaterial||obj.material.isLineBasicMaterial)){obj.material.map?.dispose();obj.material.dispose();}}if(obj.isSprite){obj.material.map?.dispose();obj.material.dispose();}});
   }
   dispose() {
-    if(this.disposed)return;this.disposed=true;for(const entry of this.players.values())disposeCharacterV2(entry.group);this.viewModel.dispose();
+    if(this.disposed)return;this.disposed=true;this.resizeObserver.disconnect();for(const entry of this.players.values())disposeCharacterV2(entry.group);this.viewModel.dispose();
     this.flash.geometry.dispose();this.flashMat.dispose();this.scene.traverse(obj=>{obj.geometry?.dispose();if(obj.material){const mats=Array.isArray(obj.material)?obj.material:[obj.material];for(const mat of mats){mat.map?.dispose();mat.dispose();}}});this.environmentTarget?.dispose();this.renderer.dispose();this.players.clear();this.effects=[];
   }
 }

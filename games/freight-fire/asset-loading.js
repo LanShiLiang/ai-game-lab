@@ -126,6 +126,9 @@ export function loadGLTF(loader,value,options={}) {
         update(record,{status:'parsing',phase:'parse',loadedBytes:buffer.byteLength,error:null,errorCode:null});
         return timeoutTask(()=>loader.parseAsync(buffer,new URL('./',record.url).href),record,options.parseTimeoutMs??60000);
       });
+      // Parsed models remain cached; release the separate complete GLB download.
+      // Parse failures keep it available for a decoder-only retry.
+      buffers.delete(record.url);
       update(record,{status:'ready',phase:'ready',error:null,errorCode:null});return source;
     }catch(error){const cause=asAssetError(error,record,record.phase,record.attempt);update(record,{status:'error',error:cause.message,errorCode:cause.code});notify(true);throw cause;}
   },options.priority??0);

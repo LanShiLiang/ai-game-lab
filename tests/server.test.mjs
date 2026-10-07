@@ -17,6 +17,11 @@ test('静态服务返回首页、游戏与正确 MIME；缺失文件为 404', as
     const base = `http://127.0.0.1:${server.address().port}`;
     const home = await fetch(base); assert.equal(home.status, 200); assert.match(await home.text(), /AI GAME/);
     const game = await fetch(`${base}/games/orbit-dash/game.js`); assert.equal(game.status, 200); assert.match(game.headers.get('content-type'), /javascript/);
+    const etag = game.headers.get('etag'); assert.ok(etag);
+    const cached = await fetch(`${base}/games/orbit-dash/game.js`, { headers: { 'If-None-Match': etag } });
+    assert.equal(cached.status, 304); assert.equal(await cached.text(), '');
+    const head = await fetch(`${base}/games/orbit-dash/game.js`, { method: 'HEAD' });
+    assert.equal(head.status, 200); assert.ok(Number(head.headers.get('content-length')) > 0); assert.equal(await head.text(), '');
     assert.equal((await fetch(`${base}/games/missing/index.html`)).status, 404);
     assert.equal((await fetch(base, { method: 'POST' })).status, 405);
   } finally {

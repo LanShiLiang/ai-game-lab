@@ -1,6 +1,7 @@
 import * as T from './vendor/three.module.js';
 import {mergeGeometries} from './vendor/BufferGeometryUtils.js';
 import {atDistance,angle,nearest} from './tracks.js';
+import {ResolutionBudget} from './performance.js';
 const Y=new T.Vector3(0,1,0);
 function rng(seed=97){return ()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
 function canvasTexture(w,h,paint){const c=document.createElement('canvas');c.width=w;c.height=h;paint(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;return t;}
@@ -41,17 +42,18 @@ export function makeCar(color='#f15a40',detail=true){
  function mergeParts(group){const map=new Map();for(const child of [...group.children])if(child.isMesh){const g=child.geometry.clone();g.deleteAttribute('uv');child.updateMatrix();g.applyMatrix4(child.matrix);if(!map.has(child.material))map.set(child.material,[]);map.get(child.material).push(g);group.remove(child);child.geometry.dispose();}for(const [m,gs] of map){const mesh=new T.Mesh(mergeGeometries(gs),m);mesh.castShadow=true;group.add(mesh);gs.forEach(g=>g.dispose());}}mergeParts(body);wheels.forEach(w=>{if(!detail)for(const m of [...w.object.children])if(m.material===carbon||m.material===paint){w.object.remove(m);m.geometry.dispose();}mergeParts(w.object);});mergeParts(flame);return {root,body,wheels,flame};
 }
 export class RaceView{
- constructor(canvas,quality='medium'){
+ constructor(canvas,quality='auto'){
+  this.resolution=new ResolutionBudget(quality);
   this.canvas=canvas;this.renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});this.renderer.outputColorSpace=T.SRGBColorSpace;this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=.88;this.renderer.shadowMap.type=T.PCFSoftShadowMap;
   this.camera=new T.PerspectiveCamera(62,1,.15,950);this.cars=new Map();this.elapsed=0;this.stats={fps:0,calls:0,triangles:0};this.frames=0;this.lastFps=performance.now();this.quality=quality;this.cameraMode=0;this.camReady=false;this.sparks=[];this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);this.resize();
  }
- resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;this.renderer.setPixelRatio(Math.min(devicePixelRatio,this.quality==='low'?1:this.quality==='medium'?1.35:1.7));this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
- setQuality(q){this.quality=q;this.renderer.shadowMap.enabled=q!=='low';this.resize();}
+ resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;const ratio=this.resolution.ratio(devicePixelRatio,w,h);if(Math.abs(this.renderer.getPixelRatio()-ratio)>.001)this.renderer.setPixelRatio(ratio);this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
+ setQuality(q){this.resolution.setQuality(q);this.quality=this.resolution.quality;this.renderer.shadowMap.enabled=this.quality!=='low';if(this.sun){const size=this.quality==='high'?2048:1024;this.sun.shadow.mapSize.set(size,size);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.needsUpdate=true;}this.resize();}
  load(track){
   if(this.scene){this.scene.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){for(const m of Array.isArray(o.material)?o.material:[o.material]){m.map?.dispose();m.dispose();}}});this.environment?.dispose();}
   this.track=track;this.scene=new T.Scene();this.cars.clear();this.camReady=false;this.elapsed=0;this.sparks=[];
   const coast=track.theme==='coast',sky=skyTexture(coast);sky.mapping=T.EquirectangularReflectionMapping;this.scene.background=sky;const pmrem=new T.PMREMGenerator(this.renderer);this.environment=pmrem.fromEquirectangular(sky);this.scene.environment=this.environment.texture;pmrem.dispose();this.scene.fog=new T.Fog(coast?'#cae7e9':'#d6d8e8',160,500);
-  this.scene.add(new T.HemisphereLight('#d5f4ff',coast?'#bfae79':'#847e94',1.35));const sun=new T.DirectionalLight('#fff0d6',2.2);sun.position.set(-50,130,-65);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-55;sun.shadow.camera.right=55;sun.shadow.camera.top=55;sun.shadow.camera.bottom=-55;sun.shadow.camera.far=300;sun.shadow.bias=-.0005;sun.shadow.normalBias=.08;this.scene.add(sun,sun.target);this.sun=sun;this.renderer.shadowMap.enabled=this.quality!=='low';
+  this.scene.add(new T.HemisphereLight('#d5f4ff',coast?'#bfae79':'#847e94',1.35));const sun=new T.DirectionalLight('#fff0d6',2.2);sun.position.set(-50,130,-65);sun.castShadow=true;sun.shadow.mapSize.set(this.quality==='high'?2048:1024,this.quality==='high'?2048:1024);sun.shadow.camera.left=-55;sun.shadow.camera.right=55;sun.shadow.camera.top=55;sun.shadow.camera.bottom=-55;sun.shadow.camera.far=300;sun.shadow.bias=-.0005;sun.shadow.normalBias=.08;this.scene.add(sun,sun.target);this.sun=sun;this.renderer.shadowMap.enabled=this.quality!=='low';
   const batches=new Map(),mats=new Map();const material=(key,color,opt={})=>{if(!mats.has(key))mats.set(key,new T.MeshStandardMaterial({color,roughness:.79,...opt}));return mats.get(key);};
   const add=(geo,key,color,x,y,z,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0,opt={})=>{const matrix=new T.Matrix4().compose(new T.Vector3(x,y,z),new T.Quaternion().setFromEuler(new T.Euler(rx,ry,rz)),new T.Vector3(sx,sy,sz));geo.applyMatrix4(matrix);const mat=material(key,color,opt);if(!batches.has(mat))batches.set(mat,[]);batches.get(mat).push(geo);};
   const box=(key,c,x,y,z,sx,sy,sz,ry=0)=>add(new T.BoxGeometry(1,1,1),key,c,x,y,z,sx,sy,sz,0,ry);
@@ -114,7 +116,7 @@ export class RaceView{
  emit(x,y,z,color,vx=0,vz=0){const i=this.particleIndex++%500,k=i*3,c=new T.Color(color);this.particlePositions.set([x,y,z],k);this.particleColors.set([c.r,c.g,c.b],k);this.particleVel.set([vx,.3+Math.random()*.5,vz],k);this.particleLives[i]=.5+Math.random()*.4;}
  updateParticles(dt){for(let i=0;i<500;i++){const k=i*3;this.particleLives[i]-=dt;if(this.particleLives[i]<=0){this.particlePositions[k+1]=-100;continue;}for(let j=0;j<3;j++)this.particlePositions[k+j]+=this.particleVel[k+j]*dt;}this.particles.geometry.attributes.position.needsUpdate=true;this.particles.geometry.attributes.color.needsUpdate=true;}
  render(snapshot,localId,dt=.016,menu=false){
-  if(!this.scene)return;dt=Math.min(dt,.05);this.elapsed+=dt;if(this.waveTime)this.waveTime.value=this.elapsed;
+  if(!this.scene)return;if(this.resolution.sample(dt,!menu))this.resize();dt=Math.min(dt,.1);this.elapsed+=dt;if(this.waveTime)this.waveTime.value=this.elapsed;
   const p=snapshot.players.find(p=>p.id===localId)||snapshot.players[0];let target=new T.Vector3(p.x,p.y+1,p.z);
   for(const state of snapshot.players){
    let car=this.cars.get(state.id);if(!car){car=makeCar(state.color,state.id===localId);this.cars.set(state.id,car);this.scene.add(car.root);}
@@ -135,5 +137,5 @@ export class RaceView{
   for(const [id,car] of this.cars)car.root.visible=id===localId||(!menu&&car.root.position.distanceToSquared(this.camera.position)>12);
   this.renderer.render(this.scene,this.camera);this.frames++;const now=performance.now();if(now-this.lastFps>1000){this.stats={fps:Math.round(this.frames*1000/(now-this.lastFps)),calls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles};this.frames=0;this.lastFps=now;}
  }
- dispose(){this.resizeObserver.disconnect();this.renderer.dispose();}
+ dispose(){this.resizeObserver.disconnect();if(this.scene){const textures=new Set();this.scene.traverse(o=>{o.geometry?.dispose();for(const mat of [].concat(o.material||[])){for(const value of Object.values(mat))if(value?.isTexture)textures.add(value);mat.dispose();}});this.scene.background?.dispose?.();for(const t of textures)t.dispose();}this.environment?.dispose();this.renderer.dispose();}
 }

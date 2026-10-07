@@ -1,5 +1,7 @@
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
+import {createReadStream} from 'node:fs';
+import {pipeline} from 'node:stream/promises';
 import {readFile,stat,realpath} from 'node:fs/promises';
 import {networkInterfaces} from 'node:os';
 import {randomBytes} from 'node:crypto';
@@ -50,8 +52,8 @@ export async function startRacingServer({port=8790,host='0.0.0.0',root=rootDefau
    const unchanged=ifNoneMatch!==undefined?String(ifNoneMatch).split(',').some(tag=>tag.trim()==='*'||tag.trim().replace(/^W\//,'')===cached.etag.replace(/^W\//,'')):ifModifiedSince!==undefined&&Number.isFinite(Date.parse(ifModifiedSince))&&Date.parse(ifModifiedSince)>=cached.modified;
    if(unchanged){res.writeHead(304,headers);res.end();return;}
    if(req.method==='HEAD'){res.writeHead(200,{...headers,'Content-Length':fileStat.size});res.end();return;}
-   const b=await readFile(file);res.writeHead(200,{...headers,'Content-Length':b.length});res.end(b);
-  }catch{json(res,404,{error:'Not found'});}
+   res.writeHead(200,{...headers,'Content-Length':fileStat.size});await pipeline(createReadStream(file),res);
+  }catch{if(res.headersSent)res.destroy();else json(res,404,{error:'Not found'});}
  });
  server.requestTimeout=10000;server.headersTimeout=10000;
  const wss=new WebSocketServer({noServer:true,maxPayload:2048,perMessageDeflate:online?{threshold:256,concurrencyLimit:2,zlibDeflateOptions:{level:3,memLevel:5},clientNoContextTakeover:true}:false});

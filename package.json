@@ -2,6 +2,7 @@
   "name": "ai-game-lab",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "A lightweight home for AI-made JavaScript game demos.",
   "type": "module",
   "engines": {
@@ -13,10 +14,23 @@
     "preview": "node scripts/serve.mjs --preview",
     "check": "node scripts/check.mjs && node scripts/test.mjs",
     "new:game": "node scripts/new-game.mjs",
-    "lan:racing": "node scripts/racing-server.mjs --open",
-    "lan:fps": "node scripts/lan-server.mjs"
+    "lan:fps": "node scripts/lan-server.mjs",
+    "package:fps": "node scripts/package-fps.mjs",
+    "test:fps:browser": "node scripts/fps-browser-qa.mjs",
+    "test:fps:visual": "node scripts/fps-visual-qa.mjs",
+    "test:fps:rebuild": "node scripts/freight-rebuild-qa.mjs",
+    "test:fps:rigs": "node scripts/cs2-rig-qa.mjs",
+    "test:fps:characters": "node scripts/characters-upgrade-qa.mjs",
+    "lan:racing": "node scripts/racing-server.mjs",
+    "package:racing": "node scripts/package-racing.mjs",
+    "test:racing:browser": "node scripts/racing-browser-qa.mjs",
+    "test:racing:lan": "node scripts/racing-lan-qa.mjs"
   },
   "dependencies": {
+    "three": "0.180.0",
     "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
   }
 }

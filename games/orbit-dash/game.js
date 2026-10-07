@@ -1,6 +1,7 @@
 const { createState, startGame, advance, DURATION, ORBIT_RADIUS, CENTER } = globalThis.OrbitEngine;
 
-const $ = (selector) => document.querySelector(selector);
+const elements = new Map();
+const $ = (selector) => { if (!elements.has(selector)) elements.set(selector, document.querySelector(selector)); return elements.get(selector); };
 const canvas = $('#canvas');
 const ctx = canvas.getContext('2d');
 const state = createState();
@@ -12,6 +13,8 @@ let pointerAngle = null;
 let pointerId = null;
 let particles = [];
 let best = 0;
+const background = document.createElement('canvas');
+let backgroundReady = false;
 
 const stars = Array.from({ length: 44 }, (_, i) => ({
   x: ((i * 127 + 37) % 503) + 4, y: ((i * 193 + 83) % 503) + 4, size: i % 5 === 0 ? 1.7 : 0.8
@@ -20,27 +23,34 @@ const stars = Array.from({ length: 44 }, (_, i) => ({
 function fitCanvas() {
   const ratio = Math.min(devicePixelRatio || 1, 2);
   const size = Math.max(1, Math.round(canvas.getBoundingClientRect().width * ratio));
-  if (canvas.width !== size) { canvas.width = size; canvas.height = size; }
+  if (canvas.width !== size) { canvas.width = size; canvas.height = size; backgroundReady = false; }
   draw();
 }
 
 function draw() {
   ctx.setTransform(canvas.width / 512, 0, 0, canvas.height / 512, 0, 0);
   ctx.clearRect(0, 0, 512, 512);
-  ctx.fillStyle = '#8fa4d4';
-  for (const star of stars) { ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2); ctx.fill(); }
-  ctx.globalAlpha = 1;
+  if (!backgroundReady) {
+    background.width = canvas.width; background.height = canvas.height;
+    const backdrop = background.getContext('2d');
+    backdrop.setTransform(background.width / 512, 0, 0, background.height / 512, 0, 0);
+  backdrop.fillStyle = '#8fa4d4';
+  for (const star of stars) { backdrop.globalAlpha = 0.5; backdrop.beginPath(); backdrop.arc(star.x, star.y, star.size, 0, Math.PI * 2); backdrop.fill(); }
+  backdrop.globalAlpha = 1;
   for (const radius of [66, ORBIT_RADIUS, 199, 247]) {
-    ctx.beginPath(); ctx.arc(CENTER, CENTER, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = radius === ORBIT_RADIUS ? '#6c8bca' : '#293f6b';
-    ctx.lineWidth = radius === ORBIT_RADIUS ? 1.5 : 1;
-    ctx.setLineDash(radius === 199 ? [3, 9] : []); ctx.stroke();
+    backdrop.beginPath(); backdrop.arc(CENTER, CENTER, radius, 0, Math.PI * 2);
+    backdrop.strokeStyle = radius === ORBIT_RADIUS ? '#6c8bca' : '#293f6b';
+    backdrop.lineWidth = radius === ORBIT_RADIUS ? 1.5 : 1;
+    backdrop.setLineDash(radius === 199 ? [3, 9] : []); backdrop.stroke();
   }
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#f4c85f12'; ctx.beginPath(); ctx.arc(CENTER, CENTER, 44, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f4c85f22'; ctx.beginPath(); ctx.arc(CENTER, CENTER, 31, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f4c85f'; ctx.beginPath(); ctx.arc(CENTER, CENTER, 19, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#ffe8aa'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(CENTER, CENTER, 12, -2.6, -0.55); ctx.stroke();
+  backdrop.setLineDash([]);
+  backdrop.fillStyle = '#f4c85f12'; backdrop.beginPath(); backdrop.arc(CENTER, CENTER, 44, 0, Math.PI * 2); backdrop.fill();
+  backdrop.fillStyle = '#f4c85f22'; backdrop.beginPath(); backdrop.arc(CENTER, CENTER, 31, 0, Math.PI * 2); backdrop.fill();
+  backdrop.fillStyle = '#f4c85f'; backdrop.beginPath(); backdrop.arc(CENTER, CENTER, 19, 0, Math.PI * 2); backdrop.fill();
+  backdrop.strokeStyle = '#ffe8aa'; backdrop.lineWidth = 2; backdrop.beginPath(); backdrop.arc(CENTER, CENTER, 12, -2.6, -0.55); backdrop.stroke();
+    backgroundReady = true;
+  }
+  ctx.drawImage(background, 0, 0, 512, 512);
   for (const entity of state.entities) {
     const x = CENTER + Math.cos(entity.angle) * entity.radius;
     const y = CENTER + Math.sin(entity.angle) * entity.radius;
@@ -159,6 +169,23 @@ function pause() {
 }
 
 $('#start-button').addEventListener('click', begin);
+function syncFullscreen() {
+  const active = Boolean(document.fullscreenElement) || document.body.classList.contains('expanded');
+  $('#fullscreen').textContent = active ? '退出全屏' : '全屏 ⛶';
+  $('#fullscreen').setAttribute('aria-pressed', String(active));
+  fitCanvas();
+}
+$('#fullscreen').onclick = async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (document.body.classList.contains('expanded')) document.body.classList.remove('expanded');
+    else await document.documentElement.requestFullscreen();
+  } catch { document.body.classList.toggle('expanded'); }
+  syncFullscreen();
+};
+document.addEventListener('fullscreenchange', syncFullscreen);
+document.addEventListener('keydown', event => { if (event.code === 'Escape') { document.body.classList.remove('expanded'); syncFullscreen(); } });
+window.addEventListener('pagehide', stopLoop);
 $('#pause-button').addEventListener('click', () => state.phase === 'paused' ? begin() : pause());
 document.addEventListener('keydown', (event) => {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
@@ -202,3 +229,5 @@ for (const [selector, key] of [['#move-left', 'touch-left'], ['#move-right', 'to
 new ResizeObserver(fitCanvas).observe(canvas);
 motion.addEventListener('change', () => { particles = []; draw(); });
 fitCanvas();
+
+addEventListener('keydown',event=>{if(event.altKey&&event.code==='Enter'&&!event.repeat){event.preventDefault();$('#fullscreen').click();}});

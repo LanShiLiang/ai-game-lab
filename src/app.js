@@ -5,6 +5,22 @@ let catalog = [];
 let category = '全部';
 let iframe = null;
 let catalogReady = false;
+const cards = new Map();
+let searchFrame = 0, submissionLoaded = false;
+const stage = $('#game-stage');
+function syncDisplay() {
+  const full = Boolean(document.fullscreenElement), expanded = document.body.classList.contains('game-expanded');
+  $('#fullscreen-game').textContent = full ? '退出全屏' : '全屏游戏 ⛶';
+  $('#fullscreen-game').setAttribute('aria-pressed', String(full));
+  $('#expand-game').textContent = expanded ? '恢复内嵌' : '铺满窗口';
+  $('#expand-game').setAttribute('aria-pressed', String(expanded));
+  $('#exit-expanded').hidden = !full && !expanded;
+}
+function resetDisplay() {
+  document.body.classList.remove('game-expanded');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  syncDisplay();
+}
 
 function el(tag, className, content) {
   const node = document.createElement(tag);
@@ -16,10 +32,11 @@ function el(tag, className, content) {
 function renderGames() {
   const query = $('#game-search').value.trim().toLocaleLowerCase();
   const matches = catalog.filter((game) => (category === '全部' || category === game.category)
-    && [game.title, game.subtitle, game.description, ...game.tags].join(' ').toLocaleLowerCase().includes(query));
+    && game.searchText.includes(query));
   const grid = $('#game-grid');
-  grid.replaceChildren();
+  const fragment = document.createDocumentFragment();
   for (const game of matches) {
+    if (cards.has(game.id)) { fragment.append(cards.get(game.id)); continue; }
     const link = el('a', 'game-card');
     link.href = `#/play/${game.id}`;
     link.style.setProperty('--card-accent', game.accent);
@@ -28,6 +45,7 @@ function renderGames() {
     img.src = `./${game.cover}`;
     img.alt = '';
     img.loading = 'lazy';
+    img.decoding = 'async';
     img.width = 640;
     img.height = 480;
     cover.append(img, el('span', 'card-category', game.category), el('span', 'card-play', '↗'));
@@ -38,8 +56,10 @@ function renderGames() {
     for (const item of game.controls) tags.append(el('span', 'tag', item));
     body.append(titleRow, el('p', '', game.description), tags);
     link.append(cover, body);
-    grid.append(link);
+    cards.set(game.id, link);
+    fragment.append(link);
   }
+  grid.replaceChildren(fragment);
   $('#empty-state').hidden = matches.length > 0;
   $('#game-count').textContent = `${catalog.length} 个可玩实验`;
   $('#catalog-status').textContent = `显示 ${matches.length} 个游戏`;
@@ -48,7 +68,7 @@ function renderGames() {
 
 function clearGame() {
   if (iframe) { iframe.src = 'about:blank'; iframe.remove(); iframe = null; }
-  $('#game-stage').replaceChildren();
+  $('#game-mount').replaceChildren();
 }
 
 function mountGame(game) {
@@ -56,14 +76,17 @@ function mountGame(game) {
   $('#player-status').textContent = '正在打开游戏…';
   iframe = el('iframe', 'game-frame');
   iframe.title = `${game.title}游戏画面`;
-  iframe.setAttribute('sandbox', game.id === 'freight-fire' ? 'allow-scripts allow-same-origin allow-pointer-lock' : game.id === 'apex-rush' ? 'allow-scripts allow-same-origin' : 'allow-scripts');
-  iframe.setAttribute('allow', 'fullscreen');
+  iframe.setAttribute('sandbox', ['freight-fire','apex-rush'].includes(game.id) ? 'allow-scripts allow-same-origin allow-pointer-lock' : 'allow-scripts');
+  iframe.setAttribute('allow', 'fullscreen; autoplay; gamepad');
+  iframe.setAttribute('allowfullscreen', '');
   iframe.setAttribute('referrerpolicy', 'no-referrer');
   iframe.src = `./${game.entry}`;
+  const mounted = iframe;
   iframe.addEventListener('load', () => {
+    if (iframe !== mounted) return;
     $('#player-status').textContent = '点击游戏画面即可操作。';
   }, { once: true });
-  $('#game-stage').append(iframe);
+  $('#game-mount').append(iframe);
 }
 
 function route() {
@@ -75,8 +98,10 @@ function route() {
     home.hidden = true;
     player.hidden = false;
     $('#reload-game').hidden = !game;
+    for (const id of ['standalone-game', 'expand-game', 'fullscreen-game']) $('#'+id).hidden = !game;
     if (!game) {
       clearGame();
+      resetDisplay();
       $('#player-title').textContent = '没有找到这个游戏';
       $('#player-description').textContent = '游戏可能已更名，请返回大厅选择。';
       $('#player-controls').replaceChildren();
@@ -84,6 +109,7 @@ function route() {
       $('#player-status').textContent = '';
     } else {
       $('#player-title').textContent = game.title;
+      $('#standalone-game').href = `./${game.entry}`;
       $('#player-description').textContent = game.description;
       $('#player-category').textContent = game.category;
       $('#player-controls').replaceChildren(...game.controls.map((item) => el('span', 'tag', item)));
@@ -93,14 +119,16 @@ function route() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   } else {
     const wasPlaying = !player.hidden;
+    resetDisplay();
     clearGame();
     home.hidden = false;
     player.hidden = true;
-    const target = routePath === '/guide' ? $('#guide') : routePath === '/collection' ? $('#collection') : null;
+    const target = routePath === '/guide' ? $('#guide') : routePath === '/collection' ? $('#collection') : routePath === '/submit' ? $('#submit') : null;
     if (target) {
       requestAnimationFrame(() => {
         target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
         if (routePath === '/guide') $('#guide summary').focus({ preventScroll: true });
+        else if (routePath === '/submit') $('#submission-form input').focus({ preventScroll: true });
         else $('#game-search').focus({ preventScroll: true });
       });
     } else if (wasPlaying) {
@@ -122,7 +150,8 @@ async function loadCatalog() {
         && game[field].startsWith(`games/${game.id}/`) && !/[\\?#%]|\.\./.test(game[field])))) {
       throw new Error('游戏清单格式无效');
     }
-    catalog = games;
+    cards.clear();
+    catalog = games.map(game => ({ ...game, searchText: [game.title, game.subtitle, game.description, ...game.tags].join(' ').toLocaleLowerCase() }));
     catalogReady = true;
     category = '全部';
     $('#filters').replaceChildren();
@@ -156,7 +185,39 @@ async function loadCatalog() {
   }
 }
 
-$('#game-search').addEventListener('input', renderGames);
+$('#game-search').addEventListener('input', () => {
+  cancelAnimationFrame(searchFrame); searchFrame = requestAnimationFrame(renderGames);
+});
+$('#expand-game').onclick = () => { document.body.classList.toggle('game-expanded'); syncDisplay(); };
+$('#fullscreen-game').onclick = async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (stage.requestFullscreen && document.fullscreenEnabled) await stage.requestFullscreen();
+    else throw new Error('Fullscreen unavailable');
+    iframe?.focus();
+  } catch {
+    document.body.classList.add('game-expanded');
+    $('#player-status').textContent = '浏览器未允许全屏，已铺满窗口。也可使用独立窗口游玩。';
+  }
+  syncDisplay();
+};
+$('#exit-expanded').onclick = resetDisplay;
+$('#standalone-game').onclick = () => iframe?.contentWindow?.postMessage({ type: 'ai-game-lab:pause' }, '*');
+document.addEventListener('fullscreenchange', syncDisplay);
+window.addEventListener('message', event => {
+  if (event.source === iframe?.contentWindow && event.data?.type === 'ai-game-lab:expand') {
+    document.body.classList.add('game-expanded'); syncDisplay();
+  }
+});
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.fullscreenElement) resetDisplay(); });
+const submissionObserver = new IntersectionObserver(entries => {
+  if (submissionLoaded || !entries.some(entry => entry.isIntersecting)) return;
+  submissionLoaded = true; submissionObserver.disconnect();
+  import('./submission.js').then(module => module.initializeSubmission()).catch(() => {
+    $('#submission-status').textContent = '投稿入口载入失败，请刷新后重试。';
+  });
+}, { rootMargin: '200px' });
+submissionObserver.observe($('#submit'));
 $('#retry-catalog').addEventListener('click', loadCatalog);
 $('#reload-game').addEventListener('click', () => {
   const game = catalog.find((item) => `/play/${item.id}` === location.hash.slice(1));

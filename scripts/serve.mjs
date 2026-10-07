@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { stat, realpath } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { root } from './catalog.mjs';
@@ -10,7 +12,7 @@ const types = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.wasm': 'application/wasm'
+  '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.wasm': 'application/wasm', '.glb': 'model/gltf-binary'
 };
 
 export function resolveRequest(base, rawUrl) {
@@ -33,17 +35,26 @@ export function makeServer(base) {
     const filename = resolveRequest(base, request.url || '/');
     if (!filename) { response.writeHead(404); response.end('Not found'); return; }
     try {
-      if (!(await stat(filename)).isFile()) throw new Error('Not a file');
-      const data = await readFile(filename);
-      response.writeHead(200, {
+      const actual = await realpath(filename), relative = path.relative(await realpath(base), actual);
+      if (relative.startsWith('..') || path.isAbsolute(relative) || !resolveRequest(base, '/' + relative.split(path.sep).join('/'))) throw new Error('Not a public file');
+      const info = await stat(actual);
+      if (!info.isFile()) throw new Error('Not a file');
+      const etag = `W/"${info.size.toString(16)}-${info.mtimeMs.toString(16)}"`;
+      const headers = {
         'Content-Type': types[path.extname(filename).toLowerCase()] || 'application/octet-stream',
-        'Content-Length': data.length,
+        'ETag': etag,
         'Cache-Control': 'no-cache',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'no-referrer'
-      });
-      response.end(request.method === 'HEAD' ? undefined : data);
+      };
+      if (String(request.headers['if-none-match'] || '').split(',').some(tag => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+        response.writeHead(304, headers); response.end(); return;
+      }
+      response.writeHead(200, { ...headers, 'Content-Length': info.size });
+      if (request.method === 'HEAD') response.end();
+      else await pipeline(createReadStream(actual), response);
     } catch {
+      if (response.headersSent) { response.destroy(); return; }
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('文件不存在');
     }

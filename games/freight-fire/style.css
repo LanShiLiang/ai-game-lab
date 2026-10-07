@@ -71,3 +71,5 @@ body.mobile #weapon-slots{display:none}
 #loading-diagnostics{font-size:10px;color:#90aab8;margin-top:15px;}#loading-diagnostics summary{cursor:pointer;}#loading-details{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;line-height:1.8;color:#b3c4ce;font:10px/1.8 Consolas,"Microsoft YaHei",sans-serif;}
 #loading.is-error{--amber:#efad83;}.is-error #loading-stage{color:#f4c4a7;}
 @media(max-width:480px){#loading{padding:16px;}.loading-metrics{gap:10px;}.loading-metrics strong{font-size:10px;}}
+
+#menu-fullscreen{color:var(--ink);background:#dce8ed;border:1px solid #8cabb8;padding:7px 10px;border-radius:4px;font-size:11px;min-height:34px}
