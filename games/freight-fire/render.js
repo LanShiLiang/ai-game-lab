@@ -145,6 +145,28 @@ export class ArenaRenderer {
     return entry;
   }
 
+  async warmup(snapshot, localId) {
+    // Prepare both character materials and the first-person weapon before the
+    // start button becomes available. No live match or input is advanced here.
+    for (const player of snapshot.players) {
+      const group = this.getPlayer(player).group;
+      group.position.set(player.x, player.y || 0, player.z);
+      group.rotation.y = player.yaw || 0;
+      updateCharacterV2(group, player, 0, snapshot.time);
+    }
+    const local = snapshot.players.find(player => player.id === localId);
+    this.view.visible = true;
+    this.updateView(local, { paused: true }, 1 / 60);
+    if (this.renderer.compileAsync) {
+      await this.renderer.compileAsync(this.scene, this.camera);
+      await this.renderer.compileAsync(this.viewScene, this.viewCamera);
+    }
+    this.render(snapshot, localId, { paused: true }, 1 / 60);
+    this.render({ time: 0, players: [], events: [] }, null, { paused: true }, 1 / 60);
+    this.resetView();
+    this.cameraReady = false;
+  }
+
   render(snapshot, localId, input = {}, dt = 1 / 60) {
     if(this.disposed)return;
     if(this.resolution.sample(dt,Boolean(localId)&&!input.paused))this.resize();

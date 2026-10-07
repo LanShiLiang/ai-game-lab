@@ -100,7 +100,10 @@ async function initializeArena(){
   loadingScreen.stage('下载人物、枪械与配套动作…');await Promise.all([loadCharacters(),loadViewModels()]);
   audio.prepare({retryFailed:true});loadingScreen.stage('准备运输船甲板与贴图…');
   if(!view){creatingRenderer=true;view=new ArenaRenderer(canvas,{quality:$('#quality').value});creatingRenderer=false;}else view.retryEnvironment();
-  await view.ready;loadingScreen.complete();if(!renderLoopStarted){renderLoopStarted=true;frameTime=performance.now();renderLoop.start();}
+  await view.ready;loadingScreen.stage('准备人物与枪械的首次画面…');
+  const preview=new Match({size:4,goal:40,duration:300,difficulty:'easy'}),previewPlayer=preview.addHuman('预加载',0);
+  await view.warmup(preview.snapshot(),previewPlayer.id);
+  loadingScreen.complete();if(!renderLoopStarted){renderLoopStarted=true;frameTime=performance.now();renderLoop.start();}
   const query=new URLSearchParams(location.search);if(!staticMode&&query.has('room')){setMode('lan');$('#room-code').value=query.get('room');status('好友邀请已填好，输入呼号后点击“加入房间”。');}
   if(query.has('qa')&&!window.__freight)Object.defineProperty(window,'__freight',{value:{get snapshot(){return snapshot},get localId(){return selfId},get match(){return match},get input(){return input},get view(){return view},get audio(){return audio},get paused(){return paused},get zoomLevel(){return scopeLevel},get buyOpen(){return buyOpen},get loading(){return assetLoading.snapshot},pause,resume,restart,startOffline,leave}});
  }catch(error){loadingScreen.fail(error,{webgl:creatingRenderer});console.error(error);}

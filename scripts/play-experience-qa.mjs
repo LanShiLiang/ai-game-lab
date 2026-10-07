@@ -81,7 +81,9 @@ try {
     check('Orbit real-time run reaches an end screen', await page.locator('#overlay-title').innerText()); await page.locator('#start-button').click(); assert.ok(await page.evaluate(() => state.elapsed < 1 && state.shields === 3)); check('Orbit retry resets timer and shields');
     await page.goto(base + '/games/freight-fire/?qa=1'); await page.waitForFunction(() => window.__freight?.view, null, { timeout: 180000 }); await page.locator('#start').click(); await page.waitForFunction(() => !__freight.paused);
     const start = await page.evaluate(() => { const p = __freight.snapshot.players.find(p => p.id === __freight.localId); return { x: p.x, z: p.z }; });
-    await page.keyboard.down('KeyW'); await page.waitForTimeout(500); await page.keyboard.up('KeyW');
+    await page.keyboard.down('KeyW');
+    try { await page.waitForFunction(start => { const p = __freight.snapshot.players.find(p => p.id === __freight.localId); return Math.hypot(p.x - start.x, p.z - start.z) > 1; }, start, { timeout: 10000 }); }
+    finally { await page.keyboard.up('KeyW'); }
     assert.ok(await page.evaluate(start => { const p = __freight.snapshot.players.find(p => p.id === __freight.localId); return Math.hypot(p.x - start.x, p.z - start.z) > 1; }, start)); check('FPS real W input moves the player');
     const yaw = await page.evaluate(() => __freight.input.yaw); await page.mouse.move(700, 400); await page.mouse.move(820, 390); assert.notEqual(await page.evaluate(() => __freight.input.yaw), yaw); check('FPS mouse input turns the view');
     const ammo = await page.evaluate(() => __freight.snapshot.players.find(p => p.id === __freight.localId).ammo[0]); await page.mouse.down(); await page.waitForTimeout(350); await page.mouse.up();
