@@ -42,7 +42,7 @@ npm.cmd run dev -- --port 5174     # 5173 已被占用时换端口
 
 保留已认可的经典地图结构与材质；枪手、人物、动作与音效直接复用用户指定的 dust2-web 公开 CS2 资源，采用匹配原生骨骼。M4A1-S / AK-47 / AWP 主武器配 USP-S 与爪子刀，支持两级狙击镜、从当前姿态与受击惯性进入有关节限制的物理布娃娃、尸体视角和 CS2 击杀条。音效默认开启。原版地图绝对尺寸尚未全部实测，地图不标记为已经验收一比一。详细说明与来源见 [运输船枪战说明](games/freight-fire/README.md)。
 
-`npm.cmd run test:fps:browser` 验证真实键鼠、选枪、近战、音效、死亡重生、大厅与 LAN 流程；`npm.cmd run test:fps:visual` 验证五套原生枪手、人物姿态与死亡镜头。`artifacts/` 保存结果，不进入构建。
+`npm.cmd run test:fps:browser` 验证真实键鼠、选枪、瞄准、死亡重生、大厅与 LAN 流程；`npm.cmd run test:experience` 验证画面、触控、暂停与结算重开。`artifacts/` 保存结果，不进入构建。
 
 ## 加入新游戏
 

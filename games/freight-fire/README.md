@@ -61,14 +61,14 @@ Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides
 - `node --test tests/fps-sim.test.mjs tests/fps-network.test.mjs`：选枪权限、装备限制、刀的伤害 / 遮挡 / 保护、死亡元数据与真实 WebSocket 同步。
 - `node --test tests/fps-audio.test.mjs`：本地 / 远处 AWP 拉栓身份、爆头与击杀去重、刀命中音效和保护反馈。
 - `npm run test:fps:browser`：真实键鼠与 UI 的 B 选枪、三个装备槽、两级开镜、枪声 / 后坐力、刀攻击、反馈界面和重生；本地目标位置 / 生命值和死亡视角布置明确使用 `?qa=1` 接口。
-- `npm run test:fps:visual`：两队五种配套枪手的源动画轨迹 / 挂点、静态镜片，以及人物姿态、死亡接触、地图中的镜头路径与重生画面。
+- `npm run test:experience`：游戏画面、手机横竖屏、触控操作、暂停恢复与结算后重新开局。
 - `node scripts/original-skins-qa.mjs`：原创新贴图、两队五武器的真实握持与原动作轨迹，以及正常按钮 / 按键对战；诊断场景与实战截图分别记录。
 - `node --test tests/fps-community-skins.test.mjs tests/fps-character-death.test.mjs`：社区模型原始字节、语义访问器和骨架一致性；两队真实蒙皮模型布娃娃的接地、关节、骨长、暂停、冻结与复活。
 - `node scripts/prepare-original-skins.mjs repack games/freight-fire/assets/viewmodel-cs2/original/recipe.json`：使用随仓库提供的源 JPEG 重建三份派生 GLB，拒绝源哈希或非颜色数据改变。
 
 报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；尚未在两台实体 LAN 电脑上验收。
 
-`dist/` 为完整静态大厅。`npm run package:fps` 可生成独立人机版与源码 ZIP，不自动发布。旧枪手 / Rocketbox / CC0 枪声文件与原署名作为历史资源保留，当前不加载。完整来源见 [素材署名](./credits.html) 与根目录 `THIRD_PARTY_NOTICES.md`。
+`dist/` 为完整静态大厅。获取公开仓库后执行 `npm ci`、`npm run build` 即可生成；`npm run lan:fps` 启动局域网服务。当前素材与历史来源说明见 [素材署名](./credits.html) 与根目录 `THIRD_PARTY_NOTICES.md`。
 
 ## 大厅封面
 

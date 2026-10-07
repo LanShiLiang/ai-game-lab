@@ -15,7 +15,7 @@ npm ci --ignore-scripts
 npm run dev
 ```
 
-打开终端显示的本地地址。`npm test` 运行模拟、真实 WebSocket 和音频事件单元测试；`npm run check` 验证脚本、资源哈希与引用；`npm run build` 输出纯静态站点。Windows 局域网使用 `start-fps-lan.cmd`，或跨平台运行 `npm run lan:fps`。浏览器验收需要本机 Chrome；执行 `npm run test:fps:browser` 或 `npm run test:fps:visual`，报告写到忽略的 `artifacts/`。浏览器套件依次运行，避免争抢焦点。
+打开终端显示的本地地址。`npm run check` 运行模拟、真实 WebSocket 和音频事件测试，并验证脚本、资源哈希与引用；`npm run build` 输出纯静态站点。Windows 局域网使用 `start-fps-lan.cmd`，或跨平台运行 `npm run lan:fps`。浏览器验收需要本机 Chrome；执行 `npm run test:fps:browser` 或 `npm run test:experience`，报告写到忽略的 `artifacts/`。浏览器套件依次运行，避免争抢焦点。
 
 ## 当前素材与效果
 
@@ -77,7 +77,7 @@ Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides
 - `node --test tests/fps-sim.test.mjs tests/fps-network.test.mjs`：选枪权限、装备限制、刀的伤害 / 遮挡 / 保护、死亡元数据与真实 WebSocket 同步。
 - `node --test tests/fps-audio.test.mjs`：本地 / 远处 AWP 拉栓身份、爆头与击杀去重、刀命中音效和保护反馈。
 - `npm run test:fps:browser`：真实键鼠与 UI 的 B 选枪、三个装备槽、两级开镜、枪声 / 后坐力、刀攻击、反馈界面和重生；本地目标位置 / 生命值和死亡视角布置明确使用 `?qa=1` 接口。
-- `npm run test:fps:visual`：两队五种配套枪手的源动画轨迹 / 挂点、静态镜片，以及人物姿态、死亡接触、地图中的镜头路径与重生画面。
+- `npm run test:experience`：游戏画面、手机横竖屏、触控操作、暂停恢复与结算后重新开局。
 - `npm run test:fps:animation`：原始蒙皮模型的连续射击 / 换弹、舒展倒地、冻结与复活诊断，并用真实开始 / 移动 / 开火输入检查可玩比赛。`npm test` 同时检查两队模型的骨长、增量动作、倒地连续性和冻结后的零物理更新。
 
 报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；尚未在两台实体 LAN 电脑上验收。
