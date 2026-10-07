@@ -73,3 +73,9 @@ body.mobile #weapon-slots{display:none}
 @media(max-width:480px){#loading{padding:16px;}.loading-metrics{gap:10px;}.loading-metrics strong{font-size:10px;}}
 
 #menu-fullscreen{color:var(--ink);background:#dce8ed;border:1px solid #8cabb8;padding:7px 10px;border-radius:4px;font-size:11px;min-height:34px}
+.menu-surface{align-items:flex-start}.briefing{align-self:center}.setup-panel{margin-block:auto;max-height:100%;overflow:auto}#start,#resume{position:sticky;bottom:0;z-index:1}
+body.mobile #weapon-slots{display:none}body.mobile .radar-wrap{top:80px;left:12px}body.mobile .touch-buttons button{min-height:44px;min-width:44px}
+@media(max-height:500px){.menu-surface{padding:16px}.setup-panel{padding:16px}.operation{margin-top:12px}.intro{margin:12px 0}.briefing h1{font-size:38px}.map-note{display:none}.match-bar{height:46px;top:8px}.radar-wrap{transform:scale(.55)}body.mobile #weapon-slots{display:none}body.mobile .top-actions{top:65px}.touch-pad{bottom:48px;width:80px;height:80px}.touch-buttons{bottom:136px;width:210px}.health-block{bottom:14px}.weapon-block{bottom:14px}.scoreboard{place-items:start center}.scoreboard-card{padding:16px}}
+@media(max-height:600px){.menu-surface{padding:14px}.setup-panel{padding:14px}.panel-heading{font-size:14px;padding-bottom:10px}.mode-tabs{margin:12px 0}.mode-tabs button{padding:7px 10px}.field{gap:5px;margin-bottom:8px}.field input,.field select{height:32px;padding:5px 8px}.team-choice{margin-bottom:10px}.team-choice>div{margin-top:5px}.deploy{padding:11px 14px}.status:not(.error){display:none}.instructions{padding-top:8px;margin-top:8px}}
+body.mobile #killfeed .feed-line:nth-child(n+3){display:none}
+@media(max-height:500px){body.mobile #killfeed{top:8px;max-width:180px}body.mobile .top-actions{top:78px}}

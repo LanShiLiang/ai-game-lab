@@ -37,9 +37,19 @@ if (process.argv[2] === '--sync') {
     const previous = catalog.find(entry => entry.id === game.id);
     return { ...game, featured: previous?.featured ?? game.featured, ...(game.id === 'freight-fire' ? { description: previous.description, tags: previous.tags } : {}) };
   }));
-  const scripts = ['catalog.mjs', 'check.mjs', 'build.mjs', 'serve.mjs', 'new-game.mjs', 'test.mjs', 'lan-server.mjs', 'racing-server.mjs', 'prepare-original-skins.mjs', 'community-skins-verification.mjs', 'lab-upgrade-qa.mjs', 'prepare-lab-release.mjs', 'activate-lab-release.sh'];
+  const scripts = ['catalog.mjs', 'check.mjs', 'build.mjs', 'serve.mjs', 'new-game.mjs', 'test.mjs', 'lan-server.mjs', 'racing-server.mjs', 'prepare-original-skins.mjs', 'community-skins-verification.mjs', 'lab-upgrade-qa.mjs', 'play-experience-qa.mjs', 'racing-browser-qa.mjs', 'fps-browser-qa.mjs', 'freight-rebuild-qa.mjs', 'prepare-lab-release.mjs', 'activate-lab-release.sh'];
   for (const name of scripts) await cp(path.join(root, 'scripts', name), path.join(publication, 'scripts', name));
   for (const name of ['package.json', 'package-lock.json', 'racing-online.config.json', 'racing-server.config.json']) await cp(path.join(root, name), path.join(publication, name));
+  const pkg = JSON.parse(await readFile(path.join(publication, 'package.json'), 'utf8'));
+  // Public commands reference only source included in the public repository.
+  pkg.scripts = {
+    dev: 'node scripts/serve.mjs', build: 'node scripts/build.mjs', preview: 'node scripts/serve.mjs --preview',
+    check: 'node scripts/check.mjs && node scripts/test.mjs', 'new:game': 'node scripts/new-game.mjs',
+    'lan:fps': 'node scripts/lan-server.mjs', 'lan:racing': 'node scripts/racing-server.mjs',
+    'test:display': 'node scripts/lab-upgrade-qa.mjs', 'test:experience': 'node scripts/play-experience-qa.mjs',
+    'test:fps:browser': 'node scripts/fps-browser-qa.mjs --regression-only', 'test:racing:browser': 'node scripts/racing-browser-qa.mjs'
+  };
+  await save(path.join(publication, 'package.json'), pkg);
   console.log('Synced authorized hall, games, tests and build/release scripts to the publication checkout.');
 } else {
   const id = process.argv[2], phase = process.argv[3] || 'final';

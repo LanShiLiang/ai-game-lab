@@ -21,6 +21,12 @@ const stars = Array.from({ length: 44 }, (_, i) => ({
 }));
 
 function fitCanvas() {
+  const shell = $('.game-shell'), arena = $('.arena');
+  const padding = getComputedStyle(document.body);
+  const overhead = shell.getBoundingClientRect().height - arena.getBoundingClientRect().height;
+  const available = innerHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom) - overhead - 4;
+  const maxSize = document.fullscreenElement || document.body.classList.contains('expanded') ? 1024 : 512;
+  arena.style.width = `${Math.max(120, Math.min(maxSize, shell.clientWidth, available))}px`;
   const ratio = Math.min(devicePixelRatio || 1, 2);
   const size = Math.max(1, Math.round(canvas.getBoundingClientRect().width * ratio));
   if (canvas.width !== size) { canvas.width = size; canvas.height = size; backgroundReady = false; }
@@ -166,6 +172,7 @@ function begin() {
 function pause() {
   if (state.phase !== 'running') return;
   state.phase = 'paused'; stopLoop(); draw(); syncUI();
+  canvas.focus({ preventScroll: true });
 }
 
 $('#start-button').addEventListener('click', begin);
@@ -227,6 +234,7 @@ for (const [selector, key] of [['#move-left', 'touch-left'], ['#move-right', 'to
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => keys.delete(key));
 }
 new ResizeObserver(fitCanvas).observe(canvas);
+window.addEventListener('resize', fitCanvas);
 motion.addEventListener('change', () => { particles = []; draw(); });
 fitCanvas();
 

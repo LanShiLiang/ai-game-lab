@@ -8,6 +8,15 @@ let catalogReady = false;
 const cards = new Map();
 let searchFrame = 0, submissionLoaded = false;
 const stage = $('#game-stage');
+let layoutFrame = 0;
+function fitPlayer() {
+  cancelAnimationFrame(layoutFrame);
+  layoutFrame = requestAnimationFrame(() => {
+    if (player.hidden || document.fullscreenElement || document.body.classList.contains('game-expanded')) return;
+    const top = stage.getBoundingClientRect().top + scrollY;
+    stage.style.setProperty('--player-height', `${Math.max(280, Math.min(820, innerHeight - top - 16))}px`);
+  });
+}
 function syncDisplay() {
   const full = Boolean(document.fullscreenElement), expanded = document.body.classList.contains('game-expanded');
   $('#fullscreen-game').textContent = full ? '退出全屏' : '全屏游戏 ⛶';
@@ -15,6 +24,7 @@ function syncDisplay() {
   $('#expand-game').textContent = expanded ? '恢复内嵌' : '铺满窗口';
   $('#expand-game').setAttribute('aria-pressed', String(expanded));
   $('#exit-expanded').hidden = !full && !expanded;
+  fitPlayer();
 }
 function resetDisplay() {
   document.body.classList.remove('game-expanded');
@@ -117,6 +127,7 @@ function route() {
     }
     $('#player-title').focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: 'instant' });
+    fitPlayer();
   } else {
     const wasPlaying = !player.hidden;
     resetDisplay();
@@ -178,7 +189,7 @@ async function loadCatalog() {
     renderGames();
     route();
   } catch (error) {
-    $('#catalog-status').textContent = '无法读取游戏清单。请使用 npm run dev 启动，并检查 games.json。';
+    $('#catalog-status').textContent = '游戏清单暂时无法载入，请检查网络后重试。';
     $('#game-count').textContent = '清单未载入';
     $('#retry-catalog').hidden = false;
     console.error(error);
@@ -224,6 +235,7 @@ $('#reload-game').addEventListener('click', () => {
   if (game) mountGame(game);
 });
 window.addEventListener('hashchange', route);
+window.addEventListener('resize', fitPlayer);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) iframe?.contentWindow?.postMessage({ type: 'ai-game-lab:pause' }, '*');
 });

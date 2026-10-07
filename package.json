@@ -15,16 +15,11 @@
     "check": "node scripts/check.mjs && node scripts/test.mjs",
     "new:game": "node scripts/new-game.mjs",
     "lan:fps": "node scripts/lan-server.mjs",
-    "package:fps": "node scripts/package-fps.mjs",
-    "test:fps:browser": "node scripts/fps-browser-qa.mjs",
-    "test:fps:visual": "node scripts/fps-visual-qa.mjs",
-    "test:fps:rebuild": "node scripts/freight-rebuild-qa.mjs",
-    "test:fps:rigs": "node scripts/cs2-rig-qa.mjs",
-    "test:fps:characters": "node scripts/characters-upgrade-qa.mjs",
     "lan:racing": "node scripts/racing-server.mjs",
-    "package:racing": "node scripts/package-racing.mjs",
-    "test:racing:browser": "node scripts/racing-browser-qa.mjs",
-    "test:racing:lan": "node scripts/racing-lan-qa.mjs"
+    "test:display": "node scripts/lab-upgrade-qa.mjs",
+    "test:experience": "node scripts/play-experience-qa.mjs",
+    "test:fps:browser": "node scripts/fps-browser-qa.mjs --regression-only",
+    "test:racing:browser": "node scripts/racing-browser-qa.mjs"
   },
   "dependencies": {
     "three": "0.180.0",

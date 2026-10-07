@@ -139,7 +139,7 @@ ai-game-lab/
 
 ## 当前边界
 
-不包含账号、持久排行榜或发布后台。投稿说明与仓库 / Release 链接通过 GitHub Issue 收件，新增与部署由站长审核后完成。运输船的可选 Node 服务只提供局域网房间，不实现公网匹配或延迟补偿。开发服务器用于本机开发；构建产物可以另行放到静态托管服务，本次不自动发布。
+不包含账号、持久排行榜或发布后台。投稿说明与仓库 / Release 链接通过 GitHub Issue 收件，新增与部署由站长审核后完成。运输船的可选 Node 服务只提供局域网房间，不实现公网匹配或延迟补偿。公开大厅已部署在 [lslzqco.cn/ai-game-lab](https://lslzqco.cn/ai-game-lab/)；开发服务器仅用于本机开发。
 
 ## 开源许可证
 
@@ -158,11 +158,11 @@ ai-game-lab/
 
 ## 逐浪竞速 / APEX Racing
 
-公开人机试玩：[https://apex-coast-racing.lanshilianggg.chatgpt.site](https://apex-coast-racing.lanshilianggg.chatgpt.site)。
+公开试玩：[AI Game Lab 逐浪竞速](https://lslzqco.cn/ai-game-lab/#/play/apex-rush)。
 
 支持海滨与城市两条3D赛道、漂移集气、氮气、腾空落地喷、2–16人个人/组队、人机及局域网竞速。源码和使用说明见 `games/apex-rush/README.md`。双击 `start-racing-lan.cmd` 或运行 `npm run lan:racing` 开服；好友直接打开 http://主机IP:8790，在本地大厅选择房间加入；邀请链接也可直达房间。CDN页面为无需比赛后端的人机版，局域网比赛在自己的电脑主机运行。
 
-`npm run package:racing` 生成独立局域网服务部署包和带依赖的完整源码ZIP；`npm run test:racing:browser` 执行真实浏览器按键全程试玩。验证证据位于 `artifacts/racing/`。
+公开仓库执行 `npm ci` 后即可使用 `npm run lan:racing` 开服；`npm run test:racing:browser` 执行真实浏览器按键全程试玩。验证证据位于 `artifacts/racing/`。
 
 ## 性能、投稿与全屏验证（2026-10-06）
 
@@ -170,4 +170,13 @@ ai-game-lab/
 - 投稿表单简化为五项后，投稿专项测试与构建通过；Chrome 验证创意特色选填、空白必填内容拦截、长草稿复制、无仓库设计想法入口和 360px 排版。填写与生成草稿期间没有服务器写入或上传请求。可用 `node scripts/lab-upgrade-qa.mjs --submission-only` 重复验证。
 - 1280×800、DPR 2 的本机 Chrome 样本中，正常游玩保持约 60 FPS；两款 3D 游戏菜单约 15 FPS。相同 2.1 秒窗口内，运输船暂停的 renderer.render 调用从 252 次降为 62 次（约减少 75%）；赛车暂停保持不重绘。该结果不代表所有设备。
 - 无头 Chrome 始终把页面视为可见，因此隐藏页面和全屏拒绝分支通过明确模拟浏览器事件 / 拒绝来验证；原生全屏本身使用真实浏览器操作。没有创建测试投稿 Issue。
-- 优化前后与功能截图见 artifacts/performance/before.json、after.json。脚本入口：node scripts/lab-upgrade-qa.mjs（先构建）。本次功能修改尚未发布到线上站点；公开仓库的 MIT 范围说明已单独同步。
+- 优化前后与功能截图见 artifacts/performance/before.json、after.json。脚本入口：node scripts/lab-upgrade-qa.mjs（先构建）。这些功能已纳入 2026-10-07 的线上更新。
+
+## 使用体验验证（2026-10-07）
+
+- 普通游戏页随窗口高度调整，轨道的暂停、方向控制与提示无需滚动查找；赛车与运输船的小窗口准备页提供紧凑布局，开局与阵营选择互不遮挡。三款游戏均支持原生全屏、铺满窗口与独立窗口。
+- 运输船修复结算「返回菜单」后无法开始新局的问题；在线房间结束后隐藏失效的继续按钮，仍由房主重新开局。手机雷达与比分分开排列，触控按钮至少 44px 高。
+- 129 项自动测试及构建通过。Chrome 验证两条赛道真实按键完赛、漂移、氮气、结算与重开；本机中位帧率 60 FPS。轨道使用真实按键运行至成功或失败，不修改时间或护盾；运输船使用真实移动、鼠标、开火、换弹和菜单操作。
+- 浏览器入口：`npm run test:display`（先构建）、`npm run test:experience`、`npm run test:fps:browser`、`npm run test:racing:browser`。需安装 Chrome；截图与报告保存在 Git 忽略的 `artifacts/` 下。
+- 手机为浏览器模拟设备；运输船结算回归使用明确的分数夹具，完整比赛逻辑由模拟测试覆盖。GitHub 投稿只检查草稿跳转，不提交测试 Issue。
+- 体验审查与修复说明见 [docs/experience-20261007.md](docs/experience-20261007.md)。
