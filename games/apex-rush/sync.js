@@ -1,7 +1,8 @@
 import {angle,clamp,makeTrack,nearest} from './tracks.js';
 
 export const PREDICTION_HORIZON=.1;
-const constrain=(p,track)=>{if(!Number.isInteger(p.index))return p;const t=makeTrack(track),q=nearest(t,p.x,p.z,p.index),limit=t.width/2-1.15;if(Math.abs(q.offset)>limit){p.x=q.x+q.nx*limit*Math.sign(q.offset);p.z=q.z+q.nz*limit*Math.sign(q.offset);}if(!p.airborne)p.y=q.y;return p;};
+const displayTracks=new Map();
+const constrain=(p,track)=>{if(!Number.isInteger(p.index))return p;const id=track==='city'?'city':'beach';if(!displayTracks.has(id))displayTracks.set(id,makeTrack(id));const t=displayTracks.get(id),q=nearest(t,p.x,p.z,p.index),limit=t.width/2-1.15;if(Math.abs(q.offset)>limit){p.x=q.x+q.nx*limit*Math.sign(q.offset);p.z=q.z+q.nz*limit*Math.sign(q.offset);}if(!p.airborne)p.y=q.y;return p;};
 const mix=(a,b,f)=>a+(b-a)*f;
 const numeric=['vx','vz','speed','steer','vy','roadVy','energy','driftTime','boostTime','miniTime','miniReady','collision'];
 const hermite=(a,b,va,vb,t,span)=>{
