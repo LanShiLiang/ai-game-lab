@@ -22,10 +22,10 @@ test('12Hz packets become uniform 60Hz motion without mutating authoritative sta
 test('jitter and occasional lost snapshot preserve smooth movement and camera velocity inputs',()=>{
  const stream=new SnapshotStream(),packets=[];let previousArrival=0,index=0,last=null,speeds=[];
  for(let i=0;i<100;i++){
-  if(i%13===9)continue;const time=i/20,at=Math.max(previousArrival+.001,time+.002+[0,.024,.006,.032,.012][i%5]);
+  if(i%13===9)continue;const time=i/12,at=Math.max(previousArrival+.001,time+.002+[0,.024,.006,.032,.012][i%5]);
   packets.push({time,at});previousArrival=at;
  }
- for(let frame=0;frame<270;frame++){
+ for(let frame=0;frame<440;frame++){
   const now=frame/60;
   while(index<packets.length&&packets[index].at<=now){const m=packets[index++];stream.push(snap(car(m.time*35)),m.time,0,m.at);}
   const s=stream.sample(now);if(!s)continue;const p=s.players[0];
@@ -46,7 +46,7 @@ test('angle wrapping, respawn and new race epoch do not blend across discontinui
 });
 test('prediction is short and stops during a network outage',()=>{
  const stream=new SnapshotStream();stream.push(snap(car()),0,0,0);stream.push(snap(car(1.75)),.05,0,.05);
- const limit=stream.sample(.225).players[0].x;assert.equal(limit,1.75+35*.075);
+ const limit=stream.sample(.25).players[0].x;assert.equal(limit,1.75+35*.1);
  assert.equal(stream.sample(4).players[0].x,limit);
 });
 test('server publishes approximately 12Hz snapshots on a monotonic simulation clock and resets epochs',async()=>{

@@ -1,5 +1,7 @@
-import {angle,clamp} from './tracks.js';
+import {angle,clamp,makeTrack,nearest} from './tracks.js';
 
+export const PREDICTION_HORIZON=.1;
+const constrain=(p,track)=>{if(!Number.isInteger(p.index))return p;const t=makeTrack(track),q=nearest(t,p.x,p.z,p.index),limit=t.width/2-1.15;if(Math.abs(q.offset)>limit){p.x=q.x+q.nx*limit*Math.sign(q.offset);p.z=q.z+q.nz*limit*Math.sign(q.offset);}if(!p.airborne)p.y=q.y;return p;};
 const mix=(a,b,f)=>a+(b-a)*f;
 const numeric=['vx','vz','speed','steer','vy','roadVy','energy','driftTime','boostTime','miniTime','miniReady','collision'];
 const hermite=(a,b,va,vb,t,span)=>{
@@ -12,14 +14,14 @@ function interpolate(a,b,f,span){
  const p={...a};
  for(const key of numeric)if(Number.isFinite(a[key])&&Number.isFinite(b[key]))p[key]=mix(a[key],b[key],f);
  p.yaw=a.yaw+angle(b.yaw-a.yaw)*f;
- p.x=hermite(a.x,b.x,a.vx,b.vx,f,span);
- p.z=hermite(a.z,b.z,a.vz,b.vz,f,span);
+ p.x=a.collision>0||b.collision>0?mix(a.x,b.x,f):hermite(a.x,b.x,a.vx,b.vx,f,span);
+ p.z=a.collision>0||b.collision>0?mix(a.z,b.z,f):hermite(a.z,b.z,a.vz,b.vz,f,span);
  p.y=mix(a.y,b.y,f);
  return p;
 }
 function extrapolate(p,previous,seconds,span){
  if(previous&&previous.resets!==p.resets)previous=null;
- const t=Math.min(Math.max(seconds,0),.075),out={...p};
+ const t=Math.min(Math.max(seconds,0),PREDICTION_HORIZON),out={...p};
  if(t===0)return out;
  // Short gaps keep coasting; a lost connection never sends cars driving indefinitely.
  const ax=previous&&span>0?clamp((p.vx-previous.vx)/span,-45,45):0;
@@ -60,19 +62,19 @@ export class SnapshotStream {
   this.offset+=clamp(this.targetOffset-this.offset,-elapsed*.02,elapsed*.02);
   const latest=this.frames.at(-1);
   const desired=now-this.offset-this.delay;
-  this.starved=desired>latest.time+.076;
+  this.starved=desired>latest.time+PREDICTION_HORIZON+.001;
   // An outage cannot advance the playhead past the bounded prediction horizon.
-  const target=Math.max(this.playhead??-Infinity,Math.min(desired,latest.time+.075));this.playhead=target;
+  const target=Math.max(this.playhead??-Infinity,Math.min(desired,latest.time+PREDICTION_HORIZON));this.playhead=target;
   let left=this.frames[0],right=null;
   for(const frame of this.frames){if(frame.time<=target)left=frame;else{right=frame;break;}}
   if(target<=this.frames[0].time)return this.frames[0].snapshot;
   if(right){
    const span=right.time-left.time,f=clamp((target-left.time)/span,0,1),next=new Map(right.snapshot.players.map(p=>[p.id,p]));
-   return {...latest.snapshot,players:left.snapshot.players.map(p=>next.has(p.id)?interpolate(p,next.get(p.id),f,span):p)};
+   return {...latest.snapshot,players:left.snapshot.players.map(p=>next.has(p.id)?constrain(interpolate(p,next.get(p.id),f,span),latest.snapshot.track):p)};
   }
   if(latest.snapshot.status!=='racing')return latest.snapshot;
   const previous=this.frames.at(-2),old=new Map(previous?.snapshot.players.map(p=>[p.id,p])||[]);
-  return {...latest.snapshot,players:latest.snapshot.players.map(p=>extrapolate(p,old.get(p.id),target-latest.time,latest.time-(previous?.time??latest.time)))};
+  return {...latest.snapshot,players:latest.snapshot.players.map(p=>constrain(extrapolate(p,old.get(p.id),target-latest.time,latest.time-(previous?.time??latest.time)),latest.snapshot.track))};
  }
 }
 

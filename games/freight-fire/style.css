@@ -79,3 +79,5 @@ body.mobile #weapon-slots{display:none}body.mobile .radar-wrap{top:80px;left:12p
 @media(max-height:600px){.menu-surface{padding:14px}.setup-panel{padding:14px}.panel-heading{font-size:14px;padding-bottom:10px}.mode-tabs{margin:12px 0}.mode-tabs button{padding:7px 10px}.field{gap:5px;margin-bottom:8px}.field input,.field select{height:32px;padding:5px 8px}.team-choice{margin-bottom:10px}.team-choice>div{margin-top:5px}.deploy{padding:11px 14px}.status:not(.error){display:none}.instructions{padding-top:8px;margin-top:8px}}
 body.mobile #killfeed .feed-line:nth-child(n+3){display:none}
 @media(max-height:500px){body.mobile #killfeed{top:8px;max-width:180px}body.mobile .top-actions{top:78px}}
+
+#room-seats{margin:12px 0;font-size:11px;color:#c9d6dc}#room-capacity{line-height:1.6}#room-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.room-seat{padding:5px;border:1px solid #425865;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.room-seat.empty{color:#8498a3;border-style:dashed}.room-seat.ai{color:#b8d1df}#refresh-rooms{padding:6px 10px;margin:8px 0;font-size:11px}.online-controls button:disabled{opacity:.45;cursor:default}

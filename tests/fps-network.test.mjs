@@ -46,7 +46,7 @@ async function client(host, options = {}) {
 
 async function create(host, size, name = 'Room owner') {
   const owner = await client(host);
-  owner.send({ type: 'create_room', size, name, goal: 40, difficulty: 'normal' });
+  owner.send({ type:'create_room',size,aiCount:size===4?6:0,name,goal: 40, difficulty: 'normal' });
   return { owner, joined: await owner.next('joined') };
 }
 
@@ -58,7 +58,7 @@ async function waitFor(predicate, timeout = 3000) {
 
 test('online serves runtime files and health, hides private files and traversal', async t => {
   const host = await running(t);
-  assert.deepEqual((await (await fetch(`${host.base}/api/fps/health`)).json()).roomSizes, [4, 8]);
+  assert.deepEqual((await (await fetch(`${host.base}/api/fps/health`)).json()).roomSizes, [1,2,3,4,5,6,7,8]);
   assert.equal((await fetch(host.base)).status, 200);
   const runtime = await fetch(`${host.base}/games/freight-fire/network.js`);
   assert.equal(runtime.status, 200);
@@ -74,15 +74,15 @@ test('online serves runtime files and health, hides private files and traversal'
   assert.equal((await fetch(`${host.base}/api/fps/invites?room=missing`)).status, 404);
 });
 
-test('independent 4v4 and 8v8 matches fill empty seats with bots and expose invite metadata', async t => {
+test('independent matches preserve configured AI and vacant human seats and expose invite metadata', async t => {
   const host = await running(t);
   const four = await create(host, 4, 'PRIVATE NAME A');
   const eight = await create(host, 8, 'PRIVATE NAME B');
   for (const { joined } of [four, eight]) {
     assert.match(joined.roomId, /^[A-Za-z0-9_-]{16}$/);
-    assert.equal(joined.snapshot.players.length, joined.size * 2);
+    assert.equal(joined.snapshot.players.length, joined.aiCount+1);
     assert.equal(joined.snapshot.players.filter(player => player.human).length, 1);
-    assert.equal(joined.snapshot.players.filter(player => player.bot).length, joined.size * 2 - 1);
+    assert.equal(joined.snapshot.players.filter(player => player.bot).length, joined.aiCount);
     assert.equal(joined.playerId, joined.hostId);
     assert.equal(new URL(joined.invite, host.base).searchParams.get('room'), joined.roomId);
     const invite = await (await fetch(`${host.base}/api/fps/invites?room=${joined.roomId}`)).json();
@@ -97,7 +97,7 @@ test('independent 4v4 and 8v8 matches fill empty seats with bots and expose invi
   assert.doesNotMatch(JSON.stringify(listing), /PRIVATE NAME/);
   const streamed = await four.owner.next('snapshot');
   assert.equal(streamed.room.humanCount, 1);
-  assert.equal(streamed.snapshot.players.length, 8);
+  assert.equal(streamed.snapshot.players.length, 7);
   assert.ok(streamed.snapshot.time > four.joined.snapshot.time);
 });
 
@@ -151,8 +151,8 @@ test('server advances inputs, rejects invented state, restricts restart and migr
   await owner.close();
   await waitFor(() => room.hostId === friendJoin.playerId && room.members.size === 1);
   const bot = room.match.snapshot().players.find(player => player.id === joined.playerId);
-  assert.equal(bot.bot, true);
-  assert.equal(bot.human, false);
+  assert.equal(bot.bot, false);
+  assert.equal(bot.human, true);assert.equal(bot.connected,false);assert.equal(room.sessions.size,2);
   const update = await friend.next(message => message.type === 'room' && message.hostId === friendJoin.playerId);
   assert.equal(update.humanCount, 1);
   friend.send({ type: 'restart' });
@@ -160,7 +160,7 @@ test('server advances inputs, rejects invented state, restricts restart and migr
   friend.send({ type: 'leave' });
   await friend.next('left');
   assert.equal(room.members.size, 0);
-  assert.equal(room.match.snapshot().players.filter(player => player.bot).length, 8);
+  assert.equal(room.match.snapshot().players.filter(player => player.bot).length, 6);
 });
 
 test('online enforces spawn-only primary selection and replicates knife damage and death identity', async t => {
@@ -224,13 +224,13 @@ test('cross-origin upgrades, malformed messages, oversized payloads and flooding
 });
 
 test('heartbeat drops silent peers and idle rooms expire', async t => {
-  const host = await running(t, { heartbeatIntervalMs: 50, roomIdleMs: 80 });
+  const host = await running(t, { heartbeatIntervalMs:50,roomIdleMs:80,reconnectGraceMs:150 });
   const silent = await client(host, { autoPong: false });
   silent.send({ type: 'create_room', size: 4, name: 'Silent' });
   const joined = await silent.next('joined');
   const room = host.rooms.get(joined.roomId);
   await waitFor(() => room.members.size === 0);
-  assert.equal(room.match.snapshot().players.filter(player => player.bot).length, 8);
+  assert.equal(room.match.snapshot().players.filter(player => player.bot).length, 0);
   await waitFor(() => !host.rooms.has(joined.roomId));
 });
 
@@ -242,11 +242,11 @@ test('browser online client connects on demand, receives joins and snapshots, an
   await browser.create({ size: 4, name: 'Browser' });
   await waitFor(() => Boolean(joined && snapshot));
   assert.equal(joined.size, 4);
-  assert.equal(snapshot.players.length, 8);
+  assert.equal(snapshot.players.length, 1);
   assert.ok(Array.isArray(rooms));
   assert.equal(browser.sendInput({ forward: 0, strafe: 0, fire: false, yaw: 1, pitch: 0 }), true);
   browser.leave();
-  await waitFor(() => host.rooms.get(joined.roomId).members.size === 0);
+  await waitFor(() => !host.rooms.has(joined.roomId));
   assert.equal(browser.sendInput({ fire: true }), false);
   browser.disconnect();
   await waitFor(() => Boolean(closeEvent));

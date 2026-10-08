@@ -1,4 +1,5 @@
 /* Transport Ship — dependency-free shared simulation. */
+import {validateRoomConfig,TEAM_SIZES} from './room-rules.js';
 import { MAP } from './transport-map.js';
 export { MAP };
 export const PLAYER_RADIUS = 0.36;
@@ -278,8 +279,9 @@ const DIFFICULTY = {
 };
 
 export class Match {
-  constructor({ size = 4, goal = 40, duration = 300, difficulty = 'normal', seed = 10604 } = {}) {
-    this.size = Number(size) === 8 ? 8 : 4;
+  constructor({ size = 4, aiCount, goal = 40, duration = 300, difficulty = 'normal', seed = 10604 } = {}) {
+    if(!TEAM_SIZES.includes(Number(size)))throw Error('Invalid team size');
+    this.size=Number(size);this.fillBots=aiCount===undefined;this.aiCount=this.fillBots?this.size*2:validateRoomConfig({size:this.size,aiCount}).aiCount;
     this.goal = clamp(Math.round(finite(goal, 40)), 1, 500);
     this.duration = clamp(finite(duration, 300), 5, 3600);
     this.difficulty = Object.hasOwn(DIFFICULTY, difficulty) ? difficulty : 'normal';
@@ -289,6 +291,7 @@ export class Match {
     this.time = 0; this.score = [0, 0]; this.status = 'playing'; this.winner = null;
     this.events = [];
     this.players = Array.from({ length: this.size * 2 }, (_, i) => this._newPlayer(i));
+    for(const p of this.players){const bots=p.team===0?Math.floor(this.aiCount/2):Math.ceil(this.aiCount/2);p.seat=this.fillBots?'flex':p._index%this.size>=this.size-bots?'ai':'human';p.occupied=this.fillBots||p.seat==='ai';p.connected=p.occupied;p.bot=p.occupied;p.alive=p.occupied;if(!p.occupied)p.name='空席';}
   }
   _random() {
     let x = this._randomState; x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
@@ -340,12 +343,12 @@ export class Match {
   }
   addHuman(name = 'Operator', team) {
     const validTeam = team === 0 || team === 1 ? team : null;
-    const humans = [0, 1].map(t => this.players.filter(p => p.team === t && !p.bot).length);
+    const humans = [0, 1].map(t => this.players.filter(p => p.team === t && p.human).length);
     const preferred = validTeam ?? (humans[0] <= humans[1] ? 0 : 1);
-    let player = this.players.find(p => p.bot && p.team === preferred);
-    if (!player && validTeam === null) player = this.players.find(p => p.bot);
+    let player = this.players.find(p => (this.fillBots?p.bot:!p.occupied&&p.seat==='human') && p.team === preferred);
+    if (!player && validTeam === null) player = this.players.find(p => this.fillBots?p.bot:!p.occupied&&p.seat==='human');
     if (!player) return null;
-    player.bot = false; player.human = true;
+    player.bot = false; player.human = true;player.occupied=true;player.connected=true;
     player.primaryWeapon = 0;
     player.name = String(name).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 24) || 'Operator';
     this._spawn(player, this.time === 0);
@@ -355,15 +358,17 @@ export class Match {
   removeHuman(id) {
     const player = this.players.find(p => p.id === id);
     if (!player || player.bot) return false;
-    player.bot = true; player.human = false; player.name = BOT_NAMES[player._index % this.size];
+    player.bot=this.fillBots;player.human=false;player.occupied=this.fillBots;player.connected=this.fillBots;player.alive=this.fillBots;player.name=this.fillBots?BOT_NAMES[player._index%this.size]:'空席';
     player._input = {}; player._fireHeld = false; player._jumpHeld = false;
     player._ai.nextThink = 0; player._ai.nextPath = 0; player._ai.path = [];
     this._event('leave', { playerId: player.id, team: player.team });
     return true;
   }
+  suspendHuman(id){const p=this.players.find(p=>p.id===id&&p.human);if(!p)return false;p.connected=false;p.alive=false;p.vx=p.vy=p.vz=0;p._input={};p._fireHeld=p._jumpHeld=false;return true;}
+  resumeHuman(id){const p=this.players.find(p=>p.id===id&&p.human&&!p.connected);if(!p)return null;p.connected=true;this._spawn(p,true);return p;}
   input(id, data = {}) {
     const player = this.players.find(p => p.id === id);
-    if (!player || player.bot || this.status !== 'playing') return false;
+    if (!player || !player.occupied || !player.connected || player.bot || this.status !== 'playing') return false;
     const primaryWeapon = data.primaryWeapon;
     if (primaryWeapon !== undefined && (!Number.isInteger(primaryWeapon) || primaryWeapon < 0 || primaryWeapon > 2 || !canBuy(player))) return false;
     let weapon = typeof data.weapon === 'string' ? WEAPONS.findIndex(w => w.id === data.weapon) : data.weapon;
@@ -574,6 +579,7 @@ export class Match {
         this._finish(this.score[0] === this.score[1] ? null : this.score[0] > this.score[1] ? 0 : 1, 'time'); break;
       }
       for (const player of this.players) {
+        if(!player.occupied||!player.connected)continue;
         if (!player.alive) { if (this.time >= player.respawnAt) this._spawn(player); else continue; }
         if (player.reloadUntil > 0 && this.time >= player.reloadUntil) {
           const transfer = Math.min(WEAPONS[player.weapon].mag - player.ammo[player.weapon], player.reserve[player.weapon]);
@@ -609,15 +615,17 @@ export class Match {
     this._randomState = this.seed || 1;
     this.events = [];
     // Keep seq monotonic so connected renderers can recognize the restart event.
-    for (const player of this.players) { player.kills = 0; player.deaths = 0; this._spawn(player, true); }
+    for (const player of this.players) { player.kills = 0; player.deaths = 0;if(player.occupied&&player.connected)this._spawn(player,true); }
     this._event('restart', { score: [0, 0] });
     return this.snapshot();
   }
   snapshot() {
-    const players = this.players.map(player => Object.fromEntries(Object.entries(player)
+    const players = this.players.filter(p=>p.occupied).map(player => Object.fromEntries(Object.entries(player)
       .filter(([key]) => !key.startsWith('_')).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value])));
     return { version: 1, map: 'freight', time: this.time, score: [...this.score], status: this.status,
       winner: this.winner, size: this.size, goal: this.goal, duration: this.duration, difficulty: this.difficulty,
+      aiCount:this.players.filter(p=>p.bot&&p.occupied).length,humanCapacity:this.fillBots?this.size*2:this.size*2-this.aiCount,
+      seats:this.players.map(p=>({id:p.id,team:p.team,kind:p.bot?'ai':p.human?'human':'empty',reserved:!this.fillBots&&p.seat==='ai',name:p.name,connected:p.connected,occupied:p.occupied})),
       players, events: this.events.map(event => ({ ...event })) };
   }
 }

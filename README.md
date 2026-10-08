@@ -180,3 +180,9 @@ ai-game-lab/
 - 浏览器入口：`npm run test:display`（先构建）、`npm run test:experience`、`npm run test:fps:browser`、`npm run test:racing:browser`。需安装 Chrome；截图与报告保存在 Git 忽略的 `artifacts/` 下。
 - 手机为浏览器模拟设备；运输船结算回归使用明确的分数夹具，完整比赛逻辑由模拟测试覆盖。GitHub 投稿只检查草稿跳转，不提交测试 Issue。
 - 体验审查与修复说明见 [docs/experience-20261007.md](docs/experience-20261007.md)。
+
+### 运输船多人房间与漂移体验
+
+运输船在线建房支持每队1至8人、两队合计0至15个固定 AI，并至少保留1个真人席位。0 AI 的1v1只包含两名真人，不自动补位；菜单展示真人、AI、空席和容量。断线保留30秒并自动重连，刷新沿用本标签页的席位；明确退出释放，房主离开后移交在线玩家。
+
+飞车沿两个后轮生成涂装色世界烟尾和胎痕，按寿命线性渐隐并限制对象池数量。相机与车体共享显示锚点，保留已有插值；碰撞显示不超调，网络预测最多100ms并受护栏约束。渲染与席位边界测试见 `tests/racing-render.test.mjs`、`tests/fps-rooms.test.mjs`。

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
+import {validateRoomConfig,TEAM_SIZES} from '../games/freight-fire/room-rules.js';
 import { Match } from '../games/freight-fire/sim.js';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -42,7 +43,7 @@ export function resolvePublicFile(base, rawUrl) {
 
 function publicSummary(room) {
   return {
-    roomId: room.id, size: room.size, humanCount: room.members.size,
+    roomId:room.id,size:room.size,aiCount:room.aiCount,humanCount:room.members.size,humanCapacity:room.size*2-room.aiCount,reservedCount:room.sessions.size-room.members.size,currentCount:room.members.size+room.aiCount,
     capacity: room.size * 2, status: room.match.status, hostId: room.hostId
   };
 }
@@ -97,7 +98,7 @@ function validUpgradeOrigin(request, publicBaseURL){
 /** Starts a static host plus authoritative FPS matches; never edits firewall settings. */
 export async function startFpsServer({
   port = 8791, host = '127.0.0.1', root = projectRoot, server: sharedServer = null, publicBaseURL = '',
-  heartbeatIntervalMs = 15_000, roomIdleMs = 60_000, maxRooms = 3, maxConnections = 256
+  heartbeatIntervalMs = 15_000, roomIdleMs = 60_000, maxRooms = 3, maxConnections = 256, reconnectGraceMs=30000
 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Port must be an integer from 0 to 65535.');
   const base = await realpath(root);
@@ -121,7 +122,7 @@ export async function startFpsServer({
     try { url = new URL(request.url || '/', 'http://127.0.0.1'); } catch { json(response, 400, { error: 'Bad request' }); return; }
     const head = request.method === 'HEAD';
     if (url.pathname === '/api/fps/health') {
-      json(response, 200, { ok: true, online: true, protocol: 1, rooms: rooms.size, maxRooms, roomSizes: [4, 8] }, head); return;
+      json(response, 200, { ok: true, online: true, protocol: 1, rooms: rooms.size, maxRooms, roomSizes: TEAM_SIZES, reconnectGraceMs }, head); return;
     }
     if (url.pathname === '/api/fps/rooms') {
       json(response, 200, { rooms: [...rooms.values()].filter(room => room.members.size).map(publicSummary) }, head); return;
@@ -151,32 +152,38 @@ export async function startFpsServer({
   const server=sharedServer||createServer(handleRequest);if(sharedServer)server.on('request',handleRequest);
   server.requestTimeout = 10_000;
   server.headersTimeout = 10_000;
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate: false });
-  const detach = socket => {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate:{threshold:256,concurrencyLimit:2,zlibDeflateOptions:{level:3,memLevel:5},clientNoContextTakeover:true} });
+  const detach = (socket,explicit=false) => {
     const room = rooms.get(socket.roomId);
     if (room && socket.playerId && room.members.get(socket.playerId) === socket) {
-      room.match.removeHuman(socket.playerId);
+      const session=room.sessions.get(socket.reconnectToken);
+      if(explicit){room.match.removeHuman(socket.playerId);room.sessions.delete(socket.reconnectToken);}
+      else{room.match.suspendHuman(socket.playerId);if(session)session.expiresAt=performance.now()+reconnectGraceMs;}
       room.members.delete(socket.playerId);
       if (room.hostId === socket.playerId) room.hostId = room.members.keys().next().value || null;
       if (!room.members.size) room.emptySince = performance.now();
       const info = publicSummary(room);
-      for (const member of room.members.values()) send(member, { type: 'room', ...info });
+      for (const member of room.members.values()) send(member, { type: 'room', ...info,seats:room.match.snapshot().seats });
+      if(!room.members.size&&!room.sessions.size)rooms.delete(room.id);
     }
-    socket.roomId = null; socket.playerId = null;
+    socket.roomId = null; socket.playerId = null;socket.reconnectToken=null;
   };
-  const join = (socket, room, name) => {
+  const join = (socket, room, name, reconnectToken) => {
     if (socket.roomId) { fail(socket, 'ALREADY_JOINED', '请先离开当前房间。'); return; }
-    if (room.members.size >= room.size * 2) { fail(socket, 'ROOM_FULL', '房间已满。'); return; }
-    const player = room.match.addHuman(playerName(name));
+    let player,token=reconnectToken;
+    if(token){const session=room.sessions.get(token);if(!session||session.expiresAt!==null&&session.expiresAt<=performance.now()){fail(socket,'INVALID_RECONNECT','重连席位已过期，请重新加入。');return;}
+      if(room.members.has(session.playerId)){fail(socket,'ALREADY_CONNECTED','此玩家已在房间中，请勿重复加入。');return;}
+      player=room.match.resumeHuman(session.playerId);session.expiresAt=null;
+    }else{if(room.sessions.size>=room.size*2-room.aiCount){fail(socket,'ROOM_FULL','真人席位已满，断线席位会保留30秒。');return;}player=room.match.addHuman(playerName(name));if(player){token=randomBytes(24).toString('base64url');room.sessions.set(token,{playerId:player.id,expiresAt:null});}}
     if (!player) { fail(socket, 'ROOM_FULL', '房间已满。'); return; }
-    socket.roomId = room.id; socket.playerId = player.id; socket.lastInput = performance.now();
+    socket.roomId = room.id; socket.playerId = player.id;socket.reconnectToken=token; socket.lastInput = performance.now();
     room.members.set(player.id, socket); room.emptySince = null;
     room.hostId ||= player.id;
     send(socket, {
       type: 'joined', roomId: room.id, playerId: player.id, hostId: room.hostId,
-      size: room.size, humanCount: room.members.size, snapshot: room.match.snapshot(), invite: `games/freight-fire/?online=1&room=${room.id}`
+      ...publicSummary(room),reconnectToken:token,snapshot: room.match.snapshot(), invite: `games/freight-fire/?online=1&room=${room.id}`
     });
-    for (const member of room.members.values()) send(member, { type: 'room', ...publicSummary(room) });
+    for (const member of room.members.values()) send(member, { type: 'room', ...publicSummary(room),seats:room.match.snapshot().seats });
   };
   const handleUpgrade = (request, socket, head) => {
     let pathname;
@@ -198,9 +205,9 @@ export async function startFpsServer({
     socket.alive = true; socket.tokens = 180; socket.tokenTime = performance.now();
     socket.roomActions = []; socket.roomId = null; socket.playerId = null;
     socket.on('pong', () => { socket.alive = true; });
-    socket.on('error', () => {}); // ws protocol errors close the connection and trigger bot takeover.
+    socket.on('error', () => {}); // Protocol errors close the connection; configured human seats remain human.
     socket.on('close', () => detach(socket));
-    send(socket, { type: 'hello', protocol: 1, roomSizes: [4, 8] });
+    send(socket, { type: 'hello', protocol: 1, roomSizes: TEAM_SIZES, reconnectGraceMs });
     send(socket, { type: 'rooms', rooms: [...rooms.values()].filter(room => room.members.size).map(publicSummary) });
     socket.on('message', (data, isBinary) => {
       const now = performance.now();
@@ -219,27 +226,28 @@ export async function startFpsServer({
       }
       if (message.type === 'create_room') {
         if (socket.roomId) { fail(socket, 'ALREADY_JOINED', '请先离开当前房间。'); return; }
-        if (![4, 8].includes(message.size) || (message.goal !== undefined && (!Number.isInteger(message.goal) || message.goal < 10 || message.goal > 200))
+        let roster;try{roster=validateRoomConfig({size:message.size,aiCount:message.aiCount??0});}catch(e){fail(socket,'INVALID_ROOM',e.message);return;}
+        if ( (message.goal !== undefined && (!Number.isInteger(message.goal) || message.goal < 10 || message.goal > 200))
           || (message.difficulty !== undefined && !['easy', 'normal', 'hard'].includes(message.difficulty))) {
           fail(socket, 'INVALID_ROOM', '房间人数、目标分数或难度无效。'); return;
         }
         if (rooms.size >= maxRooms) { fail(socket, 'SERVER_FULL', '服务器房间已满。'); return; }
         const id = randomBytes(12).toString('base64url');
         const room = {
-          id, size: message.size, hostId: null, members: new Map(), emptySince: now,
-          match: new Match({ size: message.size, goal: message.goal || 40, duration: 300, difficulty: message.difficulty || 'normal', seed: randomBytes(4).readUInt32LE() })
+          id,size:roster.size,aiCount:roster.aiCount,hostId:null,members:new Map(),sessions:new Map(),emptySince:now,
+          match: new Match({ size:roster.size,aiCount:roster.aiCount,goal: message.goal || 40, duration: 300, difficulty: message.difficulty || 'normal', seed: randomBytes(4).readUInt32LE() })
         };
-        rooms.set(id, room); join(socket, room, message.name); return;
+        rooms.set(id, room); join(socket,room,message.name);return;
       }
       if (message.type === 'join_room') {
         const room = typeof message.roomId === 'string' && ROOM_TOKEN.test(message.roomId) ? rooms.get(message.roomId) : null;
         if (!room) { fail(socket, 'ROOM_NOT_FOUND', '邀请码无效，或房间已关闭。'); return; }
-        join(socket, room, message.name); return;
+        join(socket,room,message.name,message.reconnectToken);return;
       }
       if (message.type === 'list_rooms') {
         send(socket, { type: 'rooms', rooms: [...rooms.values()].filter(room => room.members.size).map(publicSummary) }); return;
       }
-      if (message.type === 'leave') { detach(socket); send(socket, { type: 'left' }); return; }
+      if (message.type === 'leave') { detach(socket,true); send(socket, { type: 'left' }); return; }
       const room = rooms.get(socket.roomId);
       if (!room || !socket.playerId) { fail(socket, 'NOT_JOINED', '请先加入房间。'); return; }
       if (message.type === 'input') {
@@ -263,7 +271,8 @@ export async function startFpsServer({
     const now = performance.now();
     accumulator += Math.min(0.1, (now - lastTick) / 1000); lastTick = now;
     for (const [id, room] of rooms) {
-      if (!room.members.size && now - room.emptySince > roomIdleMs) rooms.delete(id);
+      for(const [token,session]of room.sessions)if(session.expiresAt!==null&&session.expiresAt<=now){room.match.removeHuman(session.playerId);room.sessions.delete(token);for(const member of room.members.values())send(member,{type:'room',...publicSummary(room),seats:room.match.snapshot().seats});}
+      if(!room.members.size&&(!room.sessions.size||now-room.emptySince>Math.max(roomIdleMs,reconnectGraceMs)))rooms.delete(id);
       for (const [playerId, socket] of room.members) {
         if (now - socket.lastInput > 750) {
           room.match.input(playerId, { forward: 0, strafe: 0, fire: false, altFire: false, aim: false, jump: false, reload: false, walk: false, crouch: false });
@@ -279,7 +288,7 @@ export async function startFpsServer({
     for (const room of rooms.values()) {
       if (!room.members.size) continue;
       const message = { type: 'snapshot', roomId: room.id, hostId: room.hostId, room: publicSummary(room), snapshot: room.match.snapshot() };
-      for (const socket of room.members.values()) send(socket, message);
+      const packet=JSON.stringify(message);for(const socket of room.members.values())if(socket.readyState===WebSocket.OPEN&&socket.bufferedAmount<16000)socket.send(packet);
     }
   }, 50);
   const heartbeat = setInterval(() => {

@@ -4,5 +4,6 @@ export class RaceAudio{
  setEnabled(on){this.enabled=on;if(this.master)this.master.gain.setTargetAtTime(on?.16:0,this.context.currentTime,.1);}
  update(p,running){if(!this.context)return;const t=this.context.currentTime,gear=Math.floor(p.speed/13);this.engine.frequency.setTargetAtTime(running?52+(p.speed%13)*5+gear*10:37,t,.07);this.filter.frequency.setTargetAtTime(300+p.speed*9,t,.1);this.motorGain.gain.setTargetAtTime(running?.11:0,t,.15);this.noiseGain.gain.setTargetAtTime(!running?0:p.drifting?.095:p.boostTime>0?.05:p.speed*.00035,t,.08);}
  beep(high=false){if(!this.context)return;const o=this.context.createOscillator(),g=this.context.createGain(),t=this.context.currentTime;o.type='sine';o.frequency.value=high?880:440;g.gain.setValueAtTime(.28,t);g.gain.exponentialRampToValueAtTime(.001,t+.22);o.connect(g);g.connect(this.master);o.start(t);o.stop(t+.23);}
+ dispose(){this.stop();this.context?.close().catch(()=>{});this.context=null;}
  stop(){if(this.context){this.motorGain.gain.value=0;this.noiseGain.gain.value=0;}}
 }

@@ -1,6 +1,8 @@
 import * as T from './vendor/three.module.js';
 import {mergeGeometries} from './vendor/BufferGeometryUtils.js';
 import {atDistance,angle,nearest} from './tracks.js';
+import {ChaseCameraRig} from './camera-rig.js';
+import {DriftTrailPool,trailColor} from './drift-trails.js';
 import {ResolutionBudget} from './performance.js';
 const Y=new T.Vector3(0,1,0);
 function rng(seed=97){return ()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
@@ -45,7 +47,7 @@ export class RaceView{
  constructor(canvas,quality='auto'){
   this.resolution=new ResolutionBudget(quality);
   this.canvas=canvas;this.renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});this.renderer.outputColorSpace=T.SRGBColorSpace;this.renderer.toneMapping=T.ACESFilmicToneMapping;this.renderer.toneMappingExposure=.88;this.renderer.shadowMap.type=T.PCFSoftShadowMap;
-  this.camera=new T.PerspectiveCamera(62,1,.15,950);this.cars=new Map();this.elapsed=0;this.stats={fps:0,calls:0,triangles:0};this.frames=0;this.lastFps=performance.now();this.quality=quality;this.cameraMode=0;this.camReady=false;this.sparks=[];this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);this.resize();
+  this.rig=new ChaseCameraRig();this.trailPalette=new Map();this.camera=new T.PerspectiveCamera(62,1,.15,950);this.cars=new Map();this.elapsed=0;this.stats={fps:0,calls:0,triangles:0};this.frames=0;this.lastFps=performance.now();this.quality=quality;this.cameraMode=0;this.camReady=false;this.sparks=[];this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);this.resize();
  }
  resize(){const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;const ratio=this.resolution.ratio(devicePixelRatio,w,h);if(Math.abs(this.renderer.getPixelRatio()-ratio)>.001)this.renderer.setPixelRatio(ratio);this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
  setQuality(q){this.resolution.setQuality(q);this.quality=this.resolution.quality;this.renderer.shadowMap.enabled=this.quality!=='low';if(this.sun){const size=this.quality==='high'?2048:1024;this.sun.shadow.mapSize.set(size,size);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.needsUpdate=true;}this.resize();}
@@ -111,28 +113,32 @@ export class RaceView{
   // One pooled trail point cloud handles dust, tire sparks and exhaust wisps.
   this.particlePositions=new Float32Array(500*3);this.particleColors=new Float32Array(500*3);this.particleLives=new Float32Array(500);this.particleVel=new Float32Array(500*3);this.particleIndex=0;
   const pg=new T.BufferGeometry();pg.setAttribute('position',new T.BufferAttribute(this.particlePositions,3));pg.setAttribute('color',new T.BufferAttribute(this.particleColors,3));this.particles=new T.Points(pg,new T.PointsMaterial({map:canvasTexture(32,32,c=>{const g=c.createRadialGradient(16,16,0,16,16,16);g.addColorStop(0,'rgba(255,255,255,.9)');g.addColorStop(.35,'rgba(255,255,255,.45)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;c.fillRect(0,0,32,32);}),size:.48,vertexColors:true,transparent:true,opacity:.48,depthWrite:false}));this.particles.frustumCulled=false;this.scene.add(this.particles);
-  this.skidPositions=new Float32Array(2400*3);this.skidIndex=0;const sg=new T.BufferGeometry();sg.setAttribute('position',new T.BufferAttribute(this.skidPositions,3));sg.setDrawRange(0,0);this.skids=new T.LineSegments(sg,new T.LineBasicMaterial({color:'#24323c',transparent:true,opacity:.47}));this.skids.frustumCulled=false;this.scene.add(this.skids);this.skidLast=new Map();
+  this.trails=new DriftTrailPool();
+  const trailMaterial=(smoke=false)=>new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,uniforms:{viewport:{value:this.canvas.clientHeight},map:{value:this.particles.material.map}},vertexShader:'attribute vec3 color;attribute float alpha;attribute float size;varying vec3 vColor;varying float vAlpha;uniform float viewport;void main(){vColor=color;vAlpha=alpha;vec3 p=position;'+(smoke?'p.y+=(1.0-alpha)*0.9;':'')+'vec4 mv=modelViewMatrix*vec4(p,1.0);gl_Position=projectionMatrix*mv;'+(smoke?'gl_PointSize=clamp(size*viewport/max(1.0,-mv.z),1.0,180.0);':'')+'}',fragmentShader:'uniform sampler2D map;varying vec3 vColor;varying float vAlpha;void main(){float a=vAlpha*'+(smoke?'texture2D(map,gl_PointCoord).a*0.60':'0.55')+';if(a<0.005)discard;gl_FragColor=vec4(vColor,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}'});
+  const cloud=new T.BufferGeometry();for(const [name,array,itemSize]of [['position',this.trails.positions,3],['color',this.trails.colors,3],['alpha',this.trails.alpha,1],['size',this.trails.sizes,1]])cloud.setAttribute(name,new T.BufferAttribute(array,itemSize).setUsage(T.DynamicDrawUsage));
+  this.driftSmoke=new T.Points(cloud,trailMaterial(true));this.driftSmoke.frustumCulled=false;this.scene.add(this.driftSmoke);
+  const marks=new T.BufferGeometry();for(const [name,array,itemSize]of [['position',this.trails.markPositions,3],['color',this.trails.markColors,3],['alpha',this.trails.markAlpha,1]])marks.setAttribute(name,new T.BufferAttribute(array,itemSize).setUsage(T.DynamicDrawUsage));
+  this.driftMarks=new T.Mesh(marks,trailMaterial());this.driftMarks.frustumCulled=false;this.scene.add(this.driftMarks);
+  this.resetMotion();
  }
  emit(x,y,z,color,vx=0,vz=0){const i=this.particleIndex++%500,k=i*3,c=new T.Color(color);this.particlePositions.set([x,y,z],k);this.particleColors.set([c.r,c.g,c.b],k);this.particleVel.set([vx,.3+Math.random()*.5,vz],k);this.particleLives[i]=.5+Math.random()*.4;}
  updateParticles(dt){for(let i=0;i<500;i++){const k=i*3;this.particleLives[i]-=dt;if(this.particleLives[i]<=0){this.particlePositions[k+1]=-100;continue;}for(let j=0;j<3;j++)this.particlePositions[k+j]+=this.particleVel[k+j]*dt;}this.particles.geometry.attributes.position.needsUpdate=true;this.particles.geometry.attributes.color.needsUpdate=true;}
+ resetMotion(){this.rig.reset();this.camReady=false;this.trails?.clear();}
  render(snapshot,localId,dt=.016,menu=false){
   if(!this.scene)return;if(this.resolution.sample(dt,!menu))this.resize();dt=Math.min(dt,.1);this.elapsed+=dt;if(this.waveTime)this.waveTime.value=this.elapsed;
   const p=snapshot.players.find(p=>p.id===localId)||snapshot.players[0];let target=new T.Vector3(p.x,p.y+1,p.z);
+  this.trails.setLow(this.quality==='low'||this.reduce||this.resolution.scale<.7);this.trails.update(dt);
   for(const state of snapshot.players){
    let car=this.cars.get(state.id);if(!car){car=makeCar(state.color,state.id===localId);this.cars.set(state.id,car);this.scene.add(car.root);}
    const boosting=state.boostTime>0||state.miniTime>0;car.root.position.set(state.x,state.y+.05,state.z);car.root.rotation.y=-state.yaw;car.body.rotation.x=state.steer*state.speed*.0009;car.body.rotation.z=(boosting?-.015:0);car.flame.visible=boosting;car.flame.scale.x=.85+Math.sin(this.elapsed*45)*.18;
    for(const w of car.wheels){w.object.rotation.z+=state.speed*dt/.47;if(w.front)w.object.rotation.y=-state.steer*.35;}
-   if(!menu&&state.drifting&&!this.reduce&&Math.random()<.6){this.emit(state.x-Math.cos(state.yaw)*1.5,state.y+.13,state.z-Math.sin(state.yaw)*1.5,'#c3ced0',-state.vx*.05,-state.vz*.05);
-    const old=this.skidLast.get(state.id),cur=[];for(const side of [-1,1])cur.push([state.x-Math.cos(state.yaw)*1.4-Math.sin(state.yaw)*side,state.y+.034,state.z-Math.sin(state.yaw)*1.4+Math.cos(state.yaw)*side]);if(old&&this.skidIndex<2400){for(let j=0;j<2;j++){this.skidPositions.set(old[j],this.skidIndex*3);this.skidIndex++;this.skidPositions.set(cur[j],this.skidIndex*3);this.skidIndex++;}this.skids.geometry.setDrawRange(0,this.skidIndex);this.skids.geometry.attributes.position.needsUpdate=true;}if(this.skidIndex>=2400)this.skidIndex=0;this.skidLast.set(state.id,cur);
-   }else this.skidLast.delete(state.id);
+   const key=trailColor(state.color);let rgb=this.trailPalette.get(key);if(!rgb){rgb=new T.Color(key).toArray();this.trailPalette.set(key,rgb);}this.trails.sample(state,dt,rgb,{enabled:!menu&&(!this.trails.low||state.id===localId||Math.hypot(state.x-p.x,state.z-p.z)<45),remote:state.id!==localId});
    if(state.collision>0&&!this.reduce)this.emit(state.x,state.y+.4,state.z,'#ffcf66',Math.random()*4-2,Math.random()*4-2);
   }
   this.updateParticles(dt);
-  let desired,look;
-  if(menu){const orbit=-.65+(this.reduce?0:Math.sin(this.elapsed*.16)*.1);desired=new T.Vector3(p.x+Math.cos(p.yaw+orbit)*10,p.y+4.4,p.z+Math.sin(p.yaw+orbit)*10);look=new T.Vector3(p.x,p.y+.65,p.z);}
-  else if(this.cameraMode===1){desired=new T.Vector3(p.x-Math.cos(p.yaw)*.3,p.y+1.9,p.z-Math.sin(p.yaw)*.3);look=new T.Vector3(p.x+Math.cos(p.yaw)*20,p.y+1.4,p.z+Math.sin(p.yaw)*20);}
-  else{const vh=p.speed>4?Math.atan2(p.vz,p.vx):p.yaw,h=p.yaw+angle(vh-p.yaw)*.35,dist=8.2+p.speed*.035;desired=new T.Vector3(p.x-Math.cos(h)*dist,p.y+4.1,p.z-Math.sin(h)*dist);look=new T.Vector3(p.x+Math.cos(h)*9,p.y+1.0,p.z+Math.sin(h)*9);}
-  if(!this.camReady){this.camera.position.copy(desired);this.look=look;this.camReady=true;}this.camera.position.lerp(desired,1-Math.exp(-dt*(menu?2.3:8)));this.look.lerp(look,1-Math.exp(-dt*10));this.camera.lookAt(this.look);const fov=this.cameraMode===1?76:62+(!menu&&!this.reduce?p.speed*.1+(p.boostTime>0?5:0):0);this.camera.fov+=(fov-this.camera.fov)*(1-Math.exp(-dt*4));this.camera.updateProjectionMatrix();
+  if(!this.camReady)this.rig.reset();const pose=this.rig.sample(p,dt,{mode:this.cameraMode,menu,elapsed:this.elapsed,reduce:this.reduce});this.camera.position.set(pose.position.x,pose.position.y,pose.position.z);this.look=new T.Vector3(pose.look.x,pose.look.y,pose.look.z);this.camera.lookAt(this.look);this.camReady=true;
+  const fov=this.cameraMode===1?76:62+(!menu&&!this.reduce?p.speed*.1+(p.boostTime>0?5:0):0);this.camera.fov+=(fov-this.camera.fov)*(1-Math.exp(-dt*4));this.camera.updateProjectionMatrix();
+  this.driftSmoke.geometry.setDrawRange(0,this.trails.budget);this.driftMarks.geometry.setDrawRange(0,this.trails.markBudget*6);this.driftSmoke.material.uniforms.viewport.value=this.canvas.clientHeight*this.renderer.getPixelRatio();for(const mesh of [this.driftSmoke,this.driftMarks])for(const attribute of Object.values(mesh.geometry.attributes))attribute.needsUpdate=true;
   this.sun.position.set(target.x-40,120,target.z-60);this.sun.target.position.copy(target);
   for(const [id,car] of this.cars)car.root.visible=id===localId||(!menu&&car.root.position.distanceToSquared(this.camera.position)>12);
   this.renderer.render(this.scene,this.camera);this.frames++;const now=performance.now();if(now-this.lastFps>1000){this.stats={fps:Math.round(this.frames*1000/(now-this.lastFps)),calls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles};this.frames=0;this.lastFps=now;}
