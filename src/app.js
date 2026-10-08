@@ -4,6 +4,8 @@ const player = $('#player-view');
 let catalog = [];
 let category = '全部';
 let iframe = null;
+let gameSession = null, readyTimer = 0;
+function postToGame(type) { iframe?.contentWindow?.postMessage({ type, session: gameSession }, ['freight-fire', 'apex-rush'].includes(iframe?.dataset.game) ? location.origin : '*'); }
 let catalogReady = false;
 const cards = new Map();
 let searchFrame = 0, submissionLoaded = false;
@@ -77,6 +79,7 @@ function renderGames() {
 }
 
 function clearGame() {
+  clearTimeout(readyTimer); readyTimer = 0; gameSession = null;
   if (iframe) { iframe.src = 'about:blank'; iframe.remove(); iframe = null; }
   $('#game-mount').replaceChildren();
 }
@@ -90,16 +93,23 @@ function mountGame(game) {
   iframe.setAttribute('allow', 'fullscreen; autoplay; gamepad');
   iframe.setAttribute('allowfullscreen', '');
   iframe.setAttribute('referrerpolicy', 'no-referrer');
-  iframe.src = `./${game.entry}`;
+  gameSession = crypto.randomUUID();
+  const session = gameSession, entry = new URL(`./${game.entry}`, location.href);
+  entry.searchParams.set('labSession', session);
+  iframe.dataset.game = game.id;
+  iframe.src = entry.href;
+  const bridged = ['freight-fire', 'apex-rush'].includes(game.id);
+  if (bridged) readyTimer = setTimeout(() => { if (gameSession === session) $('#player-status').textContent = '加载较久，请查看游戏内进度或点击重新加载。'; }, 45000);
   const mounted = iframe;
   iframe.addEventListener('load', () => {
     if (iframe !== mounted) return;
-    $('#player-status').textContent = '点击游戏画面即可操作。';
+    if (!bridged) $('#player-status').textContent = '点击游戏画面即可操作。';
   }, { once: true });
   $('#game-mount').append(iframe);
 }
 
 function route() {
+  if (parent !== window) { clearGame(); home.hidden = false; player.hidden = true; return; }
   if (!catalogReady) return;
   const routePath = location.hash.replace(/^#/, '') || '/';
   if (routePath.startsWith('/play/')) {
@@ -213,12 +223,13 @@ $('#fullscreen-game').onclick = async () => {
   syncDisplay();
 };
 $('#exit-expanded').onclick = resetDisplay;
-$('#standalone-game').onclick = () => iframe?.contentWindow?.postMessage({ type: 'ai-game-lab:pause' }, '*');
+$('#standalone-game').onclick = () => postToGame('ai-game-lab:pause');
 document.addEventListener('fullscreenchange', syncDisplay);
 window.addEventListener('message', event => {
-  if (event.source === iframe?.contentWindow && event.data?.type === 'ai-game-lab:expand') {
-    document.body.classList.add('game-expanded'); syncDisplay();
-  }
+  if (!iframe || event.source !== iframe.contentWindow || event.origin !== location.origin || event.data?.session !== gameSession) return;
+  if (event.data.type === 'ai-game-lab:ready') { clearTimeout(readyTimer); $('#player-status').textContent = '点击游戏画面即可操作。'; }
+  else if (event.data.type === 'ai-game-lab:exit') { resetDisplay(); location.hash = '/'; }
+  else if (event.data.type === 'ai-game-lab:expand') { document.body.classList.add('game-expanded'); syncDisplay(); }
 });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.fullscreenElement) resetDisplay(); });
 const submissionObserver = new IntersectionObserver(entries => {
@@ -237,6 +248,6 @@ $('#reload-game').addEventListener('click', () => {
 window.addEventListener('hashchange', route);
 window.addEventListener('resize', fitPlayer);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) iframe?.contentWindow?.postMessage({ type: 'ai-game-lab:pause' }, '*');
+  if (document.hidden) postToGame('ai-game-lab:pause');
 });
 loadCatalog();

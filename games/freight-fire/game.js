@@ -1,3 +1,4 @@
+import {installLabBridge} from './lab-bridge.js';
 import {Match,MAP,WEAPONS,canBuy} from './sim.js';
 import {killFeed,updateEquipment,updateDeath,scopeOverlay} from './combat-ui.js';
 import {ArenaRenderer} from './render.js';
@@ -79,7 +80,7 @@ canvas.addEventListener('contextmenu',e=>e.preventDefault());canvas.addEventList
 document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&active&&!paused&&!buyOpen&&!lockFallback&&snapshot?.status!=='ended')pause();});
 window.addEventListener('blur',()=>{mouseFire=false;mouseAim=false;neutral();if(match&&active&&!paused)pause();});
 document.addEventListener('visibilitychange',()=>{frameTime=performance.now();accumulator=0;if(document.hidden){renderLoop.stop();mouseFire=false;mouseAim=false;neutral();if(active)pause();}else if(renderLoopStarted)renderLoop.start();});
-window.addEventListener('message',e=>{if(e.source===window.parent&&e.data?.type==='ai-game-lab:pause'&&active)pause();});
+const labBridge=installLabBridge({onPause:()=>{if(active)pause();},onExit:leave});
 function bindPad(selector,move){const pad=$(selector);let origin=null;pad.addEventListener('pointerdown',e=>{e.preventDefault();origin={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};pad.setPointerCapture(e.pointerId)});pad.addEventListener('pointermove',e=>{if(!origin)return;e.preventDefault();if(move){touch.strafe=Math.max(-1,Math.min(1,(e.clientX-origin.x)/35));touch.forward=Math.max(-1,Math.min(1,(origin.y-e.clientY)/35));}else{turn((e.clientX-origin.lastX)*1.6,(e.clientY-origin.lastY)*1.6);origin.lastX=e.clientX;origin.lastY=e.clientY;}});const end=()=>{origin=null;if(move){touch.strafe=0;touch.forward=0;}};pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);}
 bindPad('#move-pad',true);bindPad('#look-pad',false);
 for(const [id,key] of [['touch-fire','fire'],['touch-aim','aim'],['touch-jump','jump']]){const b=$('#'+id);b.addEventListener('pointerdown',e=>{e.preventDefault();touch[key]=true;b.setPointerCapture(e.pointerId)});for(const end of ['pointerup','pointercancel'])b.addEventListener(end,()=>touch[key]=false);}
@@ -87,7 +88,7 @@ $('#touch-aim').addEventListener('pointerdown',()=>{if(me()?.weapon===2)rightPre
 for(const b of document.querySelectorAll('[data-primary]'))b.onclick=()=>choosePrimary(Number(b.dataset.primary));$('#loadout-close').onclick=()=>closeLoadout();for(const b of document.querySelectorAll('[data-equip-slot]'))b.onclick=()=>{if(!paused&&!buyOpen)equipSlot(Number(b.dataset.equipSlot));};
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=Number(b.dataset.team);document.querySelectorAll('[data-team]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))})});
 $('#start').onclick=startOffline;$('#resume').onclick=resume;$('#menu-button').onclick=pause;$('#quality').onchange=applyQuality;$('#restart').onclick=restart;$('#result-restart').onclick=restart;$('#result-menu').onclick=()=>{if(room){$('#scoreboard').hidden=true;pause()}else leave()};$('#leave').onclick=leave;$('#invite').onclick=invite;$('#create-room').onclick=()=>lan('create');$('#join-room').onclick=()=>lan('join');
-$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{if(window.parent!==window)window.parent.postMessage({type:'ai-game-lab:expand'},'*');else notice('可按 F11 使用浏览器全屏',4)}};
+$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{if(window.parent!==window)labBridge.expand();else notice('可按 F11 使用浏览器全屏',4)}};
 window.addEventListener('resize',()=>view?.resize());
 function frame(now){const dt=Math.min(.08,(now-frameTime)/1000);frameTime=now;if(resumeScope&&now>=scopeResumeAt&&me()?.alive&&me()?.weapon===2&&!paused&&!buyOpen){scopeLevel=resumeScope;resumeScope=0;}sampleInput();if(match&&active&&!paused&&snapshot?.status==='playing'){accumulator=Math.min(.15,accumulator+dt);while(accumulator>=1/60){match.input(selfId,combatInput());match.step(1/60);input.reload=false;delete input.primaryWeapon;accumulator-=1/60;}receive(match.snapshot());}if(client&&active&&now-lastNet>33){if(client.sendInput(combatInput())){input.reload=false;delete input.primaryWeapon;}lastNet=now;}if(active){processEvents();const p=me();audio.syncWeapon(p);if(p?.alive&&!paused&&!buyOpen)audio.footsteps(now/1000,p.grounded&&Math.hypot(p.vx,p.vz)>.2,p.walking||p.crouching);if(now-lastHud>100){updateHUD(now);lastHud=now;}}view.render(snapshot||{time:now/1000,players:[],score:[0,0],events:[]},active?selfId:null,{...input,zoomLevel:scopeLevel,paused},dt);$('#notice').style.opacity=now<noticeUntil&&!paused?'1':'0';$('#hitmarker').style.opacity=now<hitUntil?'1':'0';$('#damage-flash').style.opacity=now<damageUntil?String((damageUntil-now)/500):'0';}
 let initializing=false,renderLoopStarted=false;
@@ -103,7 +104,7 @@ async function initializeArena(){
   await view.ready;loadingScreen.stage('准备人物与枪械的首次画面…');
   const preview=new Match({size:4,goal:40,duration:300,difficulty:'easy'}),previewPlayer=preview.addHuman('预加载',0);
   await view.warmup(preview.snapshot(),previewPlayer.id);
-  loadingScreen.complete();if(!renderLoopStarted){renderLoopStarted=true;frameTime=performance.now();renderLoop.start();}
+  loadingScreen.complete();labBridge.ready();if(!renderLoopStarted){renderLoopStarted=true;frameTime=performance.now();renderLoop.start();}
   const query=new URLSearchParams(location.search);if(!staticMode&&query.has('room')){setMode('lan');$('#room-code').value=query.get('room');status('好友邀请已填好，输入呼号后点击“加入房间”。');}
   if(query.has('qa')&&!window.__freight)Object.defineProperty(window,'__freight',{value:{get snapshot(){return snapshot},get localId(){return selfId},get match(){return match},get input(){return input},get view(){return view},get audio(){return audio},get paused(){return paused},get zoomLevel(){return scopeLevel},get buyOpen(){return buyOpen},get loading(){return assetLoading.snapshot},pause,resume,restart,startOffline,leave}});
  }catch(error){loadingScreen.fail(error,{webgl:creatingRenderer});console.error(error);}

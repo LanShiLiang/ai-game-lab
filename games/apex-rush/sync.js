@@ -75,3 +75,15 @@ export class SnapshotStream {
   return {...latest.snapshot,players:latest.snapshot.players.map(p=>extrapolate(p,old.get(p.id),target-latest.time,latest.time-(previous?.time??latest.time)))};
  }
 }
+
+/** One fixed step behind physics, continuously sampled at the display refresh rate. */
+export function interpolateRaceSnapshots(previous,current,alpha){
+ if(!previous||!current||previous.track!==current.track||previous.status==='grid'||current.status==='grid')return current;
+ const old=new Map(previous.players.map(p=>[p.id,p])),f=clamp(alpha,0,1);
+ return {...current,players:current.players.map(p=>{
+  const a=old.get(p.id);if(!a||a.resets!==p.resets||Math.hypot(p.x-a.x,p.z-a.z)>12)return p;
+  const visual={...p};
+  for(const key of ['x','y','z',...numeric])if(Number.isFinite(a[key])&&Number.isFinite(p[key]))visual[key]=mix(a[key],p[key],f);
+  visual.yaw=a.yaw+angle(p.yaw-a.yaw)*f;return visual;
+ })};
+}
