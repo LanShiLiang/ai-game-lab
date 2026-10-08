@@ -12,7 +12,7 @@ previous=$(readlink -f "$base/current")
 [ -d "$previous" ] && [ ! -e "$release" ]
 [ "$(systemctl show "$service" -p User --value)" = resume-deploy ]
 [ "$(systemctl show "$service" -p Restart --value)" = always ]
-check_rooms(){ "$base/runtime/node" --input-type=module -e 'const h=await(await fetch("http://127.0.0.1:8790/api/racing/health",{signal:AbortSignal.timeout(5000)})).json();if(!h.ok||h.rooms!==0)throw Error("Active rooms or unhealthy service; postpone update");'; }
+check_rooms(){ "$base/runtime/node" --input-type=module -e 'const h=await(await fetch("http://127.0.0.1:8790/api/racing/health",{signal:AbortSignal.timeout(5000)})).json();if(!h.ok||h.rooms!==0)throw Error("Active racing rooms or unhealthy service; postpone update");const r=await fetch("http://127.0.0.1:8790/api/fps/health",{signal:AbortSignal.timeout(5000)});if(r.status!==404){const f=await r.json();if(!r.ok||!f.ok||f.rooms!==0)throw Error("Active FPS rooms or unhealthy service; postpone update");}'; }
 owned_pid(){
   local pid
   pid=$(systemctl show "$service" -p MainPID --value)
@@ -65,7 +65,13 @@ while IFS= read -r stale; do
 done < "$release/STALE_GZIP.txt"
 (cd "$release" && sha256sum -c SHA256SUMS.txt > "$upload/checksums.txt")
 "$base/runtime/node" --check "$release/scripts/racing-server.mjs"
-cmp -s "$previous/racing-server.config.json" "$release/racing-server.config.json"
+"$base/runtime/node" --input-type=module -e 'import fs from "node:fs";const c=JSON.parse(fs.readFileSync(process.argv[1]));if(c.host!=="127.0.0.1"||c.maxRooms!==3||c.roomTtlMs!==28800000||!c.online||!c.serveLab)throw Error("Bad online policy");' "$release/racing-online.config.json"
+"$base/runtime/node" --check "$release/scripts/fps-server.mjs"
+if [ -f "$release/RETIRED_FILES.txt" ]; then
+  while IFS= read -r retired; do
+    case "$retired" in games/apex-rush/lan.js|scripts/lan-server.mjs|tests/racing-lan.test.mjs|start-racing-lan.cmd|start-racing-lan.sh|racing-server.config.json) rm -f -- "$release/$retired";; *) exit 1;; esac
+  done < "$release/RETIRED_FILES.txt"
+fi
 check_rooms
 trap rollback ERR
 switch_link "$release" next
@@ -78,6 +84,8 @@ curl --connect-timeout 3 --max-time 20 -fsS https://lslzqco.cn/ai-game-lab/src/r
 curl --connect-timeout 3 --max-time 20 -fsS https://lslzqco.cn/ai-game-lab/ > "$upload/hall.html"
 grep -q 'submission-receiver' "$upload/hall.html"
 curl --connect-timeout 3 --max-time 20 -fsS https://lslzqco.cn/ai-game-lab/games/freight-fire/ > "$upload/freight.html"
-grep -q 'data-static="true"' "$upload/freight.html"
+grep -q 'data-mode="online"' "$upload/freight.html"
+curl --connect-timeout 3 --max-time 20 -fsS https://lslzqco.cn/ai-game-lab/api/fps/health > "$upload/fps-health.json"
+"$base/runtime/node" --input-type=module -e 'import fs from "node:fs";const h=JSON.parse(fs.readFileSync(process.argv[1]));if(!h.ok||!h.online)throw Error("Bad FPS health");' "$upload/fps-health.json"
 trap - ERR
 echo "AI_GAME_LAB_UPDATED $release_id"

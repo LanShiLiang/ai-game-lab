@@ -1,8 +1,9 @@
-/** The offline game never constructs this client unless the player chooses LAN. */
-export class LanClient {
+import {fpsServiceBase} from './config.js';
+/** The offline game never constructs this client unless the player chooses online rooms. */
+export class OnlineClient {
   constructor({ onJoined, onSnapshot, onError, onClose, onRooms, onRoom, base, url } = {}) {
     this.callbacks = { onJoined, onSnapshot, onError, onClose, onRooms, onRoom };
-    const address = new URL(url || '/fps', base || globalThis.location?.origin || 'http://localhost:8787');
+    const address = new URL(url || 'fps', base || fpsServiceBase(globalThis.location?.href || import.meta.url));
     address.protocol = address.protocol === 'https:' || address.protocol === 'wss:' ? 'wss:' : 'ws:';
     this.url = address.href;
     this.socket = null;
@@ -17,7 +18,7 @@ export class LanClient {
       const socket = new WebSocket(this.url);
       this.socket = socket;
       let opened = false;
-      const timeout = setTimeout(() => { socket.close(); reject(new Error('连接超时，请确认局域网开服窗口仍在运行。')); }, 6000);
+      const timeout = setTimeout(() => { socket.close(); reject(new Error('连接在线服务超时，请稍后重试。')); }, 6000);
       socket.addEventListener('open', () => { opened = true; clearTimeout(timeout); this.connecting = null; resolve(this); });
       socket.addEventListener('message', event => {
         let data;
@@ -32,8 +33,8 @@ export class LanClient {
         else if (data.type === 'error') this.callbacks.onError?.(data);
       });
       socket.addEventListener('error', () => {
-        if (!opened) { clearTimeout(timeout); this.connecting = null; reject(new Error('无法连接开服电脑，请从局域网地址打开游戏。')); }
-        this.callbacks.onError?.({ code: 'CONNECTION_ERROR', message: '局域网连接失败，请确认地址、端口和开服状态。' });
+        if (!opened) { clearTimeout(timeout); this.connecting = null; reject(new Error('无法连接在线服务，请检查网络后重试。')); }
+        this.callbacks.onError?.({ code: 'CONNECTION_ERROR', message: '在线服务连接失败，请稍后重试。' });
       });
       socket.addEventListener('close', event => {
         clearTimeout(timeout);

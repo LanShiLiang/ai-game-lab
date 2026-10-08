@@ -6,17 +6,17 @@ import {startRacingServer} from '../scripts/racing-server.mjs';
 import {WebSocket} from 'ws';
 const car=(x=0,yaw=0)=>({id:'car-1',x,y:.18,z:0,yaw,vx:35,vz:0,speed:35,steer:0,vy:0,roadVy:0,energy:0,driftTime:0,boostTime:0,miniTime:0,miniReady:0,collision:0,resets:0,airborne:false});
 const snap=(p)=>({track:'beach',status:'racing',players:[p],time:0,count:2});
-test('20Hz packets become uniform 60Hz motion without mutating authoritative state',()=>{
+test('12Hz packets become uniform 60Hz motion without mutating authoritative state',()=>{
  const stream=new SnapshotStream();let seq=0,last=null,speeds=[];
  for(let frame=0;frame<240;frame++){
   const now=frame/60;
-  while(seq/20<=now){const at=seq/20,p=car(at*35);stream.push(snap(p),at,0,at+.002);seq++;}
+  while(seq/12<=now){const at=seq/12,p=car(at*35);stream.push(snap(p),at,0,at+.002);seq++;}
   const visual=stream.sample(now+.002);
   if(now>.4&&last)speeds.push((visual.players[0].x-last.x)*60);
   last=visual.players[0];
  }
  assert.ok(speeds.every(v=>Math.abs(v-35)<1e-8));
- assert.equal(stream.frames.at(-1).snapshot.players[0].x,(seq-1)/20*35);
+ assert.equal(stream.frames.at(-1).snapshot.players[0].x,(seq-1)/12*35);
  assert.ok(stream.frames.length<=64);
 });
 test('jitter and occasional lost snapshot preserve smooth movement and camera velocity inputs',()=>{
@@ -49,19 +49,19 @@ test('prediction is short and stops during a network outage',()=>{
  const limit=stream.sample(.225).players[0].x;assert.equal(limit,1.75+35*.075);
  assert.equal(stream.sample(4).players[0].x,limit);
 });
-test('server publishes approximately 20Hz snapshots on a monotonic simulation clock and resets epochs',async()=>{
+test('server publishes approximately 12Hz snapshots on a monotonic simulation clock and resets epochs',async()=>{
  const app=await startRacingServer({port:0,host:'127.0.0.1'}),base='http://127.0.0.1:'+app.server.address().port,received=[];
  const s=new WebSocket(base.replace('http:','ws:')+'/racing',{origin:base});
  try{
   await new Promise((r,j)=>{s.once('open',r);s.once('error',j);});
   s.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='snapshot')received.push({at:performance.now(),...m});});
   const joined=new Promise(r=>s.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='joined')r(m);}));
-  s.send(JSON.stringify({type:'create',count:16}));await joined;
+  s.send(JSON.stringify({type:'create',count:16}));await joined;s.send(JSON.stringify({type:'start'}));
   await new Promise(r=>setTimeout(r,1250));
   const hz=(received.length-1)*1000/(received.at(-1).at-received[0].at);
-  assert.ok(hz>18&&hz<22,'actual snapshot rate '+hz);
+  assert.ok(hz>10&&hz<14,'actual snapshot rate '+hz);
   assert.ok(received.every((m,i)=>!i||m.serverTime>received[i-1].serverTime));
-  const old=received.at(-1).epoch;s.send(JSON.stringify({type:'start'}));await new Promise(r=>setTimeout(r,100));
+  const old=received.at(-1).epoch;s.send(JSON.stringify({type:'restart'}));await new Promise(r=>setTimeout(r,100));
   assert.equal(received.at(-1).epoch,old+1);s.send(JSON.stringify({type:'restart'}));await new Promise(r=>setTimeout(r,100));assert.equal(received.at(-1).epoch,old+2);
  }finally{s.terminate();await app.close();}
 });

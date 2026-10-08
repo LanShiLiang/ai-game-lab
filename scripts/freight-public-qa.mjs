@@ -91,11 +91,10 @@ try {
     report.moduleHashes.push({name,sha256:actual});
   }
   check('Actual public page modules match the final local source',{expectedRelease:report.expectedRelease,moduleHashes:report.moduleHashes});
-  assert.equal(await page.locator('body').getAttribute('data-static'), 'true');
-  assert.equal(await page.locator('[data-mode="lan"]').isVisible(), false);
+  assert.equal(await page.locator('[data-mode="online"]').isVisible(), true);
   assert.equal(await page.locator('#sound').count(), 0);
   assert.doesNotMatch(await page.locator('#menu').innerText(), /音效开启|建议佩戴耳机/);
-  check('Public static homepage loads without LAN or sound prompts', { readyMs: report.readyMs });
+  check('Public static homepage loads with online rooms and without sound prompts', { readyMs: report.readyMs });
   await screenshot('01-public-menu');
 
   stage('Start a real bot match with the normal Start button');

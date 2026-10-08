@@ -5,16 +5,16 @@ import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { startLanServer, resolvePublicFile } from '../scripts/lan-server.mjs';
-import { LanClient } from '../games/freight-fire/network.js';
+import { startFpsServer, resolvePublicFile } from '../scripts/fps-server.mjs';
+import { OnlineClient } from '../games/freight-fire/network.js';
 import { WEAPONS } from '../games/freight-fire/sim.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // Node 20 has no native browser WebSocket global; ws exposes the same event API.
-globalThis.WebSocket ||= WebSocket;
+globalThis.WebSocket=class BrowserSocket extends WebSocket{constructor(url){const origin=new URL(url);origin.protocol=origin.protocol==='wss:'?'https:':'http:';super(url,{origin:origin.origin});}};
 
 async function running(t, options = {}) {
-  const host = await startLanServer({ host: '127.0.0.1', port: 0, ...options });
+  const host = await startFpsServer({ host: '127.0.0.1', port: 0, ...options });
   t.after(() => host.close());
   return { ...host, base: `http://127.0.0.1:${host.port}`, url: `ws://127.0.0.1:${host.port}/fps` };
 }
@@ -56,7 +56,7 @@ async function waitFor(predicate, timeout = 3000) {
   assert.fail('State did not converge before timeout');
 }
 
-test('LAN serves runtime files and health, hides private files and traversal', async t => {
+test('online serves runtime files and health, hides private files and traversal', async t => {
   const host = await running(t);
   assert.deepEqual((await (await fetch(`${host.base}/api/fps/health`)).json()).roomSizes, [4, 8]);
   assert.equal((await fetch(host.base)).status, 200);
@@ -65,7 +65,7 @@ test('LAN serves runtime files and health, hides private files and traversal', a
   assert.match(runtime.headers.get('content-type'), /javascript/);
   assert.equal((await fetch(`${host.base}/games.json`, { method: 'HEAD' })).status, 200);
   assert.equal((await fetch(host.base, { method: 'POST' })).status, 405);
-  for (const route of ['/package.json', '/package-lock.json', '/README.md', '/scripts/lan-server.mjs', '/tests/fps-network.test.mjs', '/.git/config', '/games/freight-fire/.env']) {
+  for (const route of ['/package.json', '/package-lock.json', '/README.md', '/scripts/fps-server.mjs', '/tests/fps-network.test.mjs', '/.git/config', '/games/freight-fire/.env']) {
     assert.equal((await fetch(`${host.base}${route}`)).status, 404, route);
   }
   for (const route of ['/../package.json', '/%2e%2e/package.json', '/games/../../package.json', '/src/%5c..%5cpackage.json', '/%ZZ', '/games/freight-fire/notes.md']) {
@@ -87,9 +87,8 @@ test('independent 4v4 and 8v8 matches fill empty seats with bots and expose invi
     assert.equal(new URL(joined.invite, host.base).searchParams.get('room'), joined.roomId);
     const invite = await (await fetch(`${host.base}/api/fps/invites?room=${joined.roomId}`)).json();
     assert.equal(invite.roomId, joined.roomId);
-    assert.match(invite.local, new RegExp(`^http://localhost:${host.port}/games/freight-fire/index.html\\?room=`));
-    assert.ok(Array.isArray(invite.lan));
-    for (const link of invite.lan) assert.match(new URL(link).hostname, /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/);
+    assert.equal(invite.invite,`games/freight-fire/?online=1&room=${joined.roomId}`);
+    assert.deepEqual(Object.keys(invite).sort(),['invite','roomId']);
   }
   assert.notEqual(four.joined.roomId, eight.joined.roomId);
   const listing = await (await fetch(`${host.base}/api/fps/rooms`)).json();
@@ -164,7 +163,7 @@ test('server advances inputs, rejects invented state, restricts restart and migr
   assert.equal(room.match.snapshot().players.filter(player => player.bot).length, 8);
 });
 
-test('LAN enforces spawn-only primary selection and replicates knife damage and death identity', async t => {
+test('online enforces spawn-only primary selection and replicates knife damage and death identity', async t => {
   const host = await running(t);
   const { owner, joined } = await create(host, 4);
   const friend = await client(host);
@@ -235,10 +234,10 @@ test('heartbeat drops silent peers and idle rooms expire', async t => {
   await waitFor(() => !host.rooms.has(joined.roomId));
 });
 
-test('browser LAN client connects on demand, receives joins and snapshots, and leaves cleanly', async t => {
+test('browser online client connects on demand, receives joins and snapshots, and leaves cleanly', async t => {
   const host = await running(t);
   let joined; let snapshot; let rooms; let closeEvent;
-  const browser = new LanClient({ base: host.base, onJoined: value => { joined = value; }, onSnapshot: value => { snapshot = value; }, onRooms: value => { rooms = value; }, onClose: value => { closeEvent = value; } });
+  const browser = new OnlineClient({ base: host.base, onJoined: value => { joined = value; }, onSnapshot: value => { snapshot = value; }, onRooms: value => { rooms = value; }, onClose: value => { closeEvent = value; } });
   assert.equal(browser.socket, null, 'constructing the client does not connect');
   await browser.create({ size: 4, name: 'Browser' });
   await waitFor(() => Boolean(joined && snapshot));

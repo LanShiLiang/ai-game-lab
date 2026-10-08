@@ -1,6 +1,6 @@
 # AI Game Lab
 
-一个放得下很多 JavaScript 游戏 demo 的轻量实验室。首页、每款游戏和新增模板互相独立；静态游玩无需账号或远程服务。运输船另提供可选的 Node 局域网服务。
+一个放得下很多 JavaScript 游戏 demo 的轻量实验室。首页、每款游戏和新增模板互相独立；静态游玩无需账号或远程服务。多人对战仅使用中央在线房间服务。
 
 本机项目位置：`D:\ChatGPTProject\ai-game-lab`。
 
@@ -13,7 +13,7 @@ cd D:\ChatGPTProject\ai-game-lab
 npm.cmd run dev
 ```
 
-打开 **http://127.0.0.1:5173**。静态开发服务使用 Node 内置模块，运输船模型和贴图已放在本地。修改文件后刷新浏览器；开发服务器没有自动热更新。按 `Ctrl+C` 停止。执行完整测试或局域网开服前，先运行 `npm.cmd ci --ignore-scripts` 安装锁定依赖。
+打开 **http://127.0.0.1:5173**。静态开发服务使用 Node 内置模块，运输船模型和贴图已放在本地。修改文件后刷新浏览器；开发服务器没有自动热更新。按 `Ctrl+C` 停止。执行完整测试或启动在线后端前，先运行 `npm.cmd ci --ignore-scripts` 安装锁定依赖。
 
 ```powershell
 npm.cmd run check                 # 清单、资源路径、全部 JS 语法与玩法/服务器测试
@@ -38,11 +38,11 @@ npm.cmd run dev -- --port 5174     # 5173 已被占用时换端口
 
 ## 游戏：运输船枪战
 
-从大厅进入运输船枪战，或直接打开 `/games/freight-fire/`。WASD 移动、鼠标瞄准、左右键射击/瞄准、R 换弹、空格跳跃、Shift 静步、Esc 菜单。出生区按 B 选择主武器，1 主武器、2 手枪、3 刀；刀左键轻击两次、右键重刺一次可击败满血敌人。支持 4v4 / 8v8 本地 AI，局域网模式双击 `start-fps-lan.cmd` 开服。
+从大厅进入运输船枪战，或直接打开 `/games/freight-fire/`。WASD 移动、鼠标瞄准、左右键射击/瞄准、R 换弹、空格跳跃、Shift 静步、Esc 菜单。出生区按 B 选择主武器，1 主武器、2 手枪、3 刀；刀左键轻击两次、右键重刺一次可击败满血敌人。支持 4v4 / 8v8 本地 AI，多人对战从「在线房间」创建或加入。
 
 保留已认可的经典地图结构与材质；枪手、人物、动作与音效直接复用用户指定的 dust2-web 公开 CS2 资源，采用匹配原生骨骼。M4A1-S / AK-47 / AWP 主武器配 USP-S 与爪子刀，支持两级狙击镜、从当前姿态与受击惯性进入有关节限制的物理布娃娃、尸体视角和 CS2 击杀条。音效默认开启。原版地图绝对尺寸尚未全部实测，地图不标记为已经验收一比一。详细说明与来源见 [运输船枪战说明](games/freight-fire/README.md)。
 
-`npm.cmd run test:fps:browser` 验证真实键鼠、选枪、瞄准、死亡重生、大厅与 LAN 流程；`npm.cmd run test:experience` 验证画面、触控、暂停与结算重开。`artifacts/` 保存结果，不进入构建。
+`npm.cmd run test:fps:browser` 验证真实键鼠、选枪、瞄准、死亡重生、大厅与在线房间流程；`npm.cmd run test:experience` 验证画面、触控、暂停与结算重开。`artifacts/` 保存结果，不进入构建。
 
 ## 加入新游戏
 
@@ -139,7 +139,7 @@ ai-game-lab/
 
 ## 当前边界
 
-不包含账号、持久排行榜或发布后台。投稿说明与仓库 / Release 链接通过 GitHub Issue 收件，新增与部署由站长审核后完成。运输船的可选 Node 服务只提供局域网房间，不实现公网匹配或延迟补偿。公开大厅已部署在 [lslzqco.cn/ai-game-lab](https://lslzqco.cn/ai-game-lab/)；开发服务器仅用于本机开发。
+不包含账号、持久排行榜或发布后台。投稿说明与仓库 / Release 链接通过 GitHub Issue 收件，新增与部署由站长审核后完成。竞速与运输船使用同域在线房间服务；不实现公网自动匹配或延迟补偿。公开大厅已部署在 [lslzqco.cn/ai-game-lab](https://lslzqco.cn/ai-game-lab/)；开发服务器仅用于本机开发。
 
 ## 开源许可证
 
@@ -147,12 +147,12 @@ ai-game-lab/
 
 ## 本次验证记录（2026-10-04）
 
-- 在本项目目录运行 `npm run check`（语法 / 清单检查及明确枚举本仓库 `tests/` 的测试入口）：元数据、资源路径、全部 JS 语法通过，当前 64 项玩法、音频事件、静态服务与局域网测试通过；不会扫描 `artifacts/` 研究仓库或 `dist/` 副本。
+- 在本项目目录运行 `npm run check`（语法 / 清单检查及明确枚举本仓库 `tests/` 的测试入口）：元数据、资源路径、全部 JS 语法通过，当前 64 项玩法、音频事件、静态服务与房间协议测试通过；不会扫描 `artifacts/` 研究仓库或 `dist/` 副本。
 - `npm run build` 成功；浏览器验证针对正式目录的 `dist/` 构建产物。
 - 本机 Chrome 无头验证：开始、计分、真实键盘移动、暂停/继续、重开、返回大厅销毁 iframe、手机宽度布局、reduced motion、直接游戏链接与未知游戏回退全部通过；无控制台错误与 HTTP 资源失败。
 - 游戏成功/失败结算采用受控碰撞和时间状态验证，没有执行完整的人工 45 秒游玩或实体触屏设备测试。
 - 在临时副本中验证新游戏生成与注册，重复 id 被拒绝且清单保持不变。运输船已接入大厅清单。
-- 运输船：20 项模拟测试与 8 项 LAN 测试通过，包括出生区选枪、装备权限、刀伤害 / 遮挡、蹲姿命中、经典地图通路与 AI 完整对局；本机 Chrome 的通用回归和 15 项重构玩法检查通过。
+- 运输船：玩法模拟与房间协议回归，包括出生区选枪、装备权限、刀伤害 / 遮挡、蹲姿命中、经典地图通路与 AI 完整对局；本机 Chrome 的通用回归和 15 项重构玩法检查通过。
 - 运输船五种武器完成原生动画检查；2,420 个动作 / 瞄准 / 贴墙采样、两队 98 个配套枪手画面、16 个角色姿态与 36 个死亡姿态通过。这些采样不证明所有网格零相交。当前报告在 `artifacts/freight-rebuild/`、`artifacts/transport-v3/`、`artifacts/cs2-rig/` 和 `artifacts/characters-upgrade/`。
 - 浏览器记录与截图位于 `artifacts/`（Git 忽略）。
 
@@ -160,9 +160,9 @@ ai-game-lab/
 
 公开试玩：[AI Game Lab 逐浪竞速](https://lslzqco.cn/ai-game-lab/#/play/apex-rush)。
 
-支持海滨与城市两条3D赛道、漂移集气、氮气、腾空落地喷、2–16人个人/组队、人机及局域网竞速。源码和使用说明见 `games/apex-rush/README.md`。双击 `start-racing-lan.cmd` 或运行 `npm run lan:racing` 开服；好友直接打开 http://主机IP:8790，在本地大厅选择房间加入；邀请链接也可直达房间。CDN页面为无需比赛后端的人机版，局域网比赛在自己的电脑主机运行。
+支持海滨与城市两条3D赛道、漂移集气、氮气、腾空落地喷、2–16人个人/组队、人机与在线房间竞速。源码和使用说明见 `games/apex-rush/README.md`。在线玩家使用房间列表或邀请链接加入。中央服务运行 `npm run online:start`，生产经同域 HTTPS / WSS 提供访问；人机模式仍可独立运行。
 
-公开仓库执行 `npm ci` 后即可使用 `npm run lan:racing` 开服；`npm run test:racing:browser` 执行真实浏览器按键全程试玩。验证证据位于 `artifacts/racing/`。
+公开仓库执行 `npm ci` 后可使用 `npm run online:start` 启动在线后端；`npm run test:racing:browser` 执行真实浏览器按键全程试玩。验证证据位于 `artifacts/racing/`。
 
 ## 性能、投稿与全屏验证（2026-10-06）
 

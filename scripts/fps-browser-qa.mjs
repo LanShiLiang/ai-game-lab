@@ -1,15 +1,15 @@
 import {chromium} from 'playwright';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {makeServer} from './serve.mjs';
-import {startLanServer} from './lan-server.mjs';
+import {startFpsServer} from './fps-server.mjs';
 import {root} from './catalog.mjs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 
 const out=path.join(root,'artifacts','fps');await mkdir(out,{recursive:true});
-const report={date:new Date().toISOString(),platform:process.platform,checks:[],errors:[],requests:[],screenshots:[],limitations:['Automated playtest on this Windows computer; not two physical LAN computers.','Death and win overlays use explicitly identified local QA state fixtures.','Loadout/scoping checks reposition the player in its spawn through the local QA interface and stop bot attacks; keyboard and menu equipment controls remain real.']};
+const report={date:new Date().toISOString(),platform:process.platform,checks:[],errors:[],requests:[],screenshots:[],limitations:['Automated playtest on this Windows computer; centralized service tested on this PC.','Death and win overlays use explicitly identified local QA state fixtures.','Loadout/scoping checks reposition the player in its spawn through the local QA interface and stop bot attacks; keyboard and menu equipment controls remain real.']};
 const server=makeServer(root);await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}`;
-let browser,lan;
+let browser,online;
 const check=(name,detail)=>{report.checks.push({name,detail,passed:true});console.log('PASS '+name)};
 try{
   browser=await chromium.launch({headless:true,channel:'chrome',args:['--no-first-run','--autoplay-policy=no-user-gesture-required']});report.browser=browser.version();report.headless=true;
@@ -48,11 +48,11 @@ try{
     await page.evaluate(()=>{__freight.match.score=[40,12];__freight.match.status='ended';__freight.match.winner=0;});await page.waitForTimeout(300);assert.equal(await page.locator('#result-actions').isVisible(),true);await screenshot('06-victory-fixture');await page.click('#result-restart');await page.waitForTimeout(400);assert.deepEqual(await page.evaluate(()=>__freight.snapshot.score),[0,0]);check('Win/restart UI (QA fixture)',true);
     await page.keyboard.press('Escape');await page.click('#leave');await page.selectOption('#size','8');await page.click('#start');await page.waitForFunction(()=>__freight.snapshot.players.length===16);await page.waitForTimeout(1500);await screenshot('07-8v8');check('8v8 local start',16);
     report.performance=await page.evaluate(()=>({stats:__freight.view.stats,renderer:__freight.view.renderer.getContext().getParameter(7937),resolution:[innerWidth,innerHeight]}));
-    assert.equal(report.requests.some(p=>p.startsWith('/api/')||p==='/fps'),false);check('Static offline mode makes no LAN/API request',true);
+    assert.equal(report.requests.some(p=>p.startsWith('/api/')||p==='/fps'),false);check('Static offline mode makes no online/API request',true);
     // Hall integration checks the shipped iframe privileges and retains the earlier copy.
     await page.goto(url+'/#/play/freight-fire');await page.waitForSelector('iframe');const game=page.frameLocator('iframe');await game.locator('#start').waitFor();await game.locator('#start').click();await page.waitForTimeout(400);assert.equal(await game.locator('#hud').isVisible(),true);check('Hall embedded FPS loads and starts',true);await screenshot('08-hall-game');
     await page.goto(url+'/');assert.ok((await page.locator('body').innerText()).includes('下一个好玩的想法，就在这里'));assert.ok((await page.locator('body').innerText()).includes('挑一个，马上开玩。'));check('Original uncommitted homepage text retained',true);
-    lan=await startLanServer({port:0,host:'127.0.0.1',root});const base=`http://127.0.0.1:${lan.server.address().port}`;await page.goto(base+'/games/freight-fire/?qa=1');await page.waitForFunction(()=>window.__freight);await page.click('[data-mode="lan"]');await page.click('#create-room');await page.waitForFunction(()=>__freight.snapshot?.players.length===8);const rooms=await (await fetch(base+'/api/fps/rooms')).json();const id=rooms.rooms[0].roomId||rooms.rooms[0].id;check('Browser LAN room creation',id);
+    online=await startFpsServer({port:0,host:'127.0.0.1',root});const base=`http://127.0.0.1:${online.server.address().port}`;await page.goto(base+'/games/freight-fire/?qa=1');await page.waitForFunction(()=>window.__freight);await page.click('[data-mode="online"]');await page.click('#create-room');await page.waitForFunction(()=>__freight.snapshot?.players.length===8);const rooms=await (await fetch(base+'/api/fps/rooms')).json();const id=rooms.rooms[0].roomId||rooms.rooms[0].id;check('Browser online room creation',id);
     await page.keyboard.press('Escape');await page.click('#invite');await page.waitForSelector('#invite-info:not([hidden])');assert.ok((await page.locator('#invite-text').inputValue()).includes(id));check('Invite generation (no messages sent)',true);await screenshot('09-invite');
     const other=await context.newPage();other.on('pageerror',e=>report.errors.push(e.message));await other.goto(base+`/games/freight-fire/?room=${id}&qa=1`);await other.waitForFunction(()=>window.__freight);await other.fill('#nickname','QA Friend');await other.click('#join-room');await other.waitForFunction(()=>__freight.snapshot?.players.filter(p=>!p.bot).length===2);
     // Joined includes a fresh snapshot; the host receives the next broadcast.
@@ -63,7 +63,7 @@ try{
     await page.click('#resume');await page.waitForFunction(()=>!__freight.paused&&document.pointerLockElement?.id==='arena');await page.waitForFunction(()=>__freight.snapshot.players.find(p=>p.id===__freight.localId).alive);
     await page.keyboard.press('KeyB');await page.locator('#loadout').waitFor({state:'visible'});await page.locator('button[data-primary="2"]').click();await page.locator('#loadout').waitFor({state:'hidden'});
     await page.waitForFunction(()=>{const p=__freight.snapshot.players.find(p=>p.id===__freight.localId);return p.primaryWeapon===2&&p.weapon===2&&__freight.input.weapon===2;});await page.waitForFunction(()=>document.pointerLockElement?.id==='arena');await page.waitForTimeout(500);
-    const lanAmmo=await page.evaluate(()=>__freight.snapshot.players.find(p=>p.id===__freight.localId).ammo[2]);await page.mouse.down();await page.waitForTimeout(60);await page.mouse.up();await page.waitForFunction(before=>__freight.snapshot.players.find(p=>p.id===__freight.localId).ammo[2]<before,lanAmmo);
+    const onlineAmmo=await page.evaluate(()=>__freight.snapshot.players.find(p=>p.id===__freight.localId).ammo[2]);await page.mouse.down();await page.waitForTimeout(60);await page.mouse.up();await page.waitForFunction(before=>__freight.snapshot.players.find(p=>p.id===__freight.localId).ammo[2]<before,onlineAmmo);
     await page.keyboard.press('KeyR');await page.waitForFunction(()=>__freight.snapshot.players.find(p=>p.id===__freight.localId).reloadUntil>__freight.snapshot.time);
     const beforeRestart=await page.evaluate(()=>({time:__freight.snapshot.time,weapon:__freight.snapshot.players.find(p=>p.id===__freight.localId).weapon,primary:__freight.snapshot.players.find(p=>p.id===__freight.localId).primaryWeapon}));
     await page.keyboard.press('Escape');await page.locator('#menu').waitFor({state:'visible'});await page.click('#restart');
@@ -71,11 +71,11 @@ try{
     const restarted=await page.evaluate(()=>{const p=__freight.snapshot.players.find(p=>p.id===__freight.localId);return {time:__freight.snapshot.time,weapon:p.weapon,primary:p.primaryWeapon,inputWeapon:__freight.input.weapon,reload:p.reloadUntil,zoom:__freight.zoomLevel,x:p.x,z:p.z};});assert.equal(restarted.weapon,2);assert.equal(restarted.primary,2);assert.equal(restarted.inputWeapon,2);assert.equal(restarted.reload,0);assert.equal(restarted.zoom,0);
     await page.keyboard.down('KeyW');await page.waitForTimeout(450);await page.keyboard.up('KeyW');const afterRestartMove=await page.evaluate(()=>{const p=__freight.snapshot.players.find(p=>p.id===__freight.localId);return {weapon:p.weapon,primary:p.primaryWeapon,inputWeapon:__freight.input.weapon,x:p.x,z:p.z,ammo:p.ammo[2],zoom:__freight.zoomLevel};});assert.ok(Math.hypot(afterRestartMove.x-restarted.x,afterRestartMove.z-restarted.z)>1);assert.equal(afterRestartMove.weapon,2);
     await page.mouse.down();await page.waitForTimeout(60);await page.mouse.up();await page.waitForFunction(before=>__freight.snapshot.players.find(p=>p.id===__freight.localId).ammo[2]<before,afterRestartMove.ammo);
-    const afterRestartShot=await page.evaluate(()=>{const p=__freight.snapshot.players.find(p=>p.id===__freight.localId);return {weapon:p.weapon,primary:p.primaryWeapon,inputWeapon:__freight.input.weapon,ammo:p.ammo[2],zoom:__freight.zoomLevel};});assert.equal(afterRestartShot.weapon,2);assert.equal(afterRestartShot.primary,2);assert.equal(afterRestartShot.inputWeapon,2);assert.equal(afterRestartShot.zoom,0);await screenshot('10-lan-awp-restart');check('Actual LAN B-bought AWP survives host restart during reload, then moves/fires without a weapon recovery key',{beforeRestart,restarted,afterRestartMove,afterRestartShot});
+    const afterRestartShot=await page.evaluate(()=>{const p=__freight.snapshot.players.find(p=>p.id===__freight.localId);return {weapon:p.weapon,primary:p.primaryWeapon,inputWeapon:__freight.input.weapon,ammo:p.ammo[2],zoom:__freight.zoomLevel};});assert.equal(afterRestartShot.weapon,2);assert.equal(afterRestartShot.primary,2);assert.equal(afterRestartShot.inputWeapon,2);assert.equal(afterRestartShot.zoom,0);await screenshot('10-online-awp-restart');check('Actual online B-bought AWP survives host restart during reload, then moves/fires without a weapon recovery key',{beforeRestart,restarted,afterRestartMove,afterRestartShot});
   }
   assert.deepEqual(report.errors,[]);check('No browser JavaScript error',true);
-}catch(error){report.failure=error.stack;throw error;}finally{await writeFile(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));await browser?.close();await lan?.close();await new Promise(r=>server.close(r));console.log('Report: '+path.join(out,'browser-report.json'));}
-// Preserve the hall/LAN/pause/movement regression above, then exercise the
+}catch(error){report.failure=error.stack;throw error;}finally{await writeFile(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));await browser?.close();await online?.close();await new Promise(r=>server.close(r));console.log('Report: '+path.join(out,'browser-report.json'));}
+// Preserve the hall/online/pause/movement regression above, then exercise the
 // new real-input loadout, CS2 sound, knife damage and death-camera acceptance.
 // Each suite closes Chrome before the next begins, avoiding focus contention.
 if(!process.argv.includes('--visual-only')&&!process.argv.includes('--regression-only'))await import('./freight-rebuild-qa.mjs');

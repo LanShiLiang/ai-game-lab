@@ -10,11 +10,11 @@ import {racingServiceBase,remainingTime} from '../games/apex-rush/config.js';
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function client(base){const s=new WebSocket(base.replace('http:','ws:')+'/racing',{origin:base}),messages=[];s.on('message',raw=>messages.push(JSON.parse(raw)));await new Promise((r,j)=>{s.once('open',r);s.once('error',j);});return {s,send:m=>s.send(JSON.stringify(m)),next:async type=>{for(let i=0;i<100;i++){const j=messages.findIndex(m=>m.type===type);if(j>=0)return messages.splice(j,1)[0];await wait(10);}throw Error('Missing '+type);}};}
 test('online policy: exactly three rooms; 8h deadline fixed across starts/restarts; expiry closes clients and frees capacity',async()=>{
- let clock=1800000000000;const app=await startRacingServer({port:0,host:'127.0.0.1',maxRooms:8,online:true,now:()=>clock,publicBaseURL:'https://lslzqco.cn/ai-game-lab/'}),base='http://127.0.0.1:'+app.server.address().port,clients=[];
+ let clock=1800000000000;const app=await startRacingServer({port:0,host:'127.0.0.1',maxRooms:3,now:()=>clock,publicBaseURL:'https://lslzqco.cn/ai-game-lab/'}),base='http://127.0.0.1:'+app.server.address().port,clients=[];
  try{
   for(let i=0;i<4;i++)clients.push(await client(base));
   for(let i=0;i<3;i++){clients[i].send({type:'create',name:'Host '+i,count:16});const m=await clients[i].next('joined');assert.equal(m.expiresAt-m.createdAt,ROOM_LIFETIME_MS);assert.equal(m.invites[0],'https://lslzqco.cn/ai-game-lab/games/apex-rush/?online=1&room='+m.roomId);}
-  const health=await(await fetch(base+'/api/racing/health')).json();assert.equal(health.maxRooms,ONLINE_ROOM_LIMIT);assert.equal(health.roomTtlMs,28800000);assert.equal(health.rooms,3);assert.deepEqual(health.addresses,[]);
+  const health=await(await fetch(base+'/api/racing/health')).json();assert.equal(health.maxRooms,ONLINE_ROOM_LIMIT);assert.equal(health.roomTtlMs,28800000);assert.equal(health.rooms,3);assert.equal(health.addresses,undefined);
   clients[3].send({type:'create'});assert.match((await clients[3].next('error')).message,/3间/);assert.equal(app.rooms.size,3);
   const room=[...app.rooms.values()][0],deadline=room.expiresAt;clients[0].send({type:'start'});await wait(25);clock+=1000;clients[0].send({type:'restart'});await wait(25);assert.equal(room.expiresAt,deadline);assert.equal(room.createdAt,1800000000000);
   clock=deadline-1;assert.equal((await(await fetch(base+'/api/racing/rooms')).json()).rooms.length,3);
@@ -40,7 +40,7 @@ test('lab serves FPS models, textures and audio without exposing server files',a
   for(const [file,mime] of [['index.html','text/html'],['assets/viewmodel-cs2/m4a1-golden-coil.glb','model/gltf-binary'],['assets/viewmodel-cs2/ak47-fire-serpent.webp','image/webp'],['assets/audio/cs2/ak47_01.mp3','audio/mpeg'],['assets/viewmodel-cs2/SOURCES.md','text/plain'],['vendor/LICENSE','text/plain']]){
    const response=await fetch(base+'/games/freight-fire/'+file);assert.equal(response.status,200,file);assert.ok(response.headers.get('content-type').startsWith(mime),file);assert.ok((await response.arrayBuffer()).byteLength>0);
   }
-  for(const file of ['/scripts/lan-server.mjs','/games/freight-fire/.env','/games/freight-fire/../../package.json'])assert.equal((await fetch(base+file)).status,404);
+  for(const file of ['/scripts/fps-server.mjs','/games/freight-fire/.env','/games/freight-fire/../../package.json'])assert.equal((await fetch(base+file)).status,404);
  }finally{await app.close();}
 });
 test('precompressed static assets preserve original type and identity fallback',async()=>{

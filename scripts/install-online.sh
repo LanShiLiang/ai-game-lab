@@ -29,11 +29,12 @@ tar -xzf "$upload/release.tgz" -C "$release" --no-same-owner
 chown -R resume-deploy:resume-deploy "$release"
 install -m 0755 -o resume-deploy -g resume-deploy /home/resume-deploy/chilun/runtime/node-v24.21.0-linux-x64/bin/node "$base/runtime/node"
 "$base/runtime/node" --check "$release/scripts/racing-server.mjs"
-"$base/runtime/node" --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync(process.argv[1]));if(p.maxRooms!==3||p.roomTtlMs!==28800000||p.host!=='127.0.0.1'||!p.online)throw Error('Bad production policy');" "$release/racing-server.config.json"
+"$base/runtime/node" --check "$release/scripts/fps-server.mjs"
+"$base/runtime/node" --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync(process.argv[1]));if(p.maxRooms!==3||p.roomTtlMs!==28800000||p.host!=='127.0.0.1'||!p.online)throw Error('Bad production policy');" "$release/racing-online.config.json"
 ln -sfn "$release" "$base/current"
 cat > "$service_file" <<'SERVICE'
 [Unit]
-Description=AI Game Lab online racing (3 rooms, 8-hour lifetime)
+Description=AI Game Lab online rooms (racing and FPS)
 After=network.target
 [Service]
 Type=simple

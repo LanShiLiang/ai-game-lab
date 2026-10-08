@@ -1,6 +1,6 @@
 # 运输船枪战 / Transport Ship
 
-经典端游运输船的网页 FPS 练习作品，支持保卫者 / 潜伏者、4v4 / 8v8 人机与局域网对战。保留已认可的经典地图结构和绘制材质，本轮重构人物、配套枪手、死亡视角与战斗界面。与官方游戏无关联。
+经典端游运输船的网页 FPS 练习作品，支持保卫者 / 潜伏者、4v4 / 8v8 人机与在线房间对战。保留已认可的经典地图结构和绘制材质，本轮重构人物、配套枪手、死亡视角与战斗界面。与官方游戏无关联。
 
 ## 当前素材与效果
 
@@ -42,19 +42,15 @@
 
 Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides_controls.html) 作为静步，已取消冲刺加速、动画和扩张视角。速度按本地图尺度调校，官网未提供可独立核验的绝对速度，当前不声称数值一比一。
 
-## Windows 局域网开服
+## 在线房间
 
-1. 安装官方 [Node.js](https://nodejs.org/) 20 或更高版本。
-2. 解压完整源码包，双击根目录 `start-fps-lan.cmd`。缺少依赖时仅执行锁定版本的 `npm ci --omit=dev --ignore-scripts`，首次安装需要网络。
-3. 开服电脑打开窗口显示的本机地址，选择“局域网好友”，创建 4v4 / 8v8 房间。
-4. 菜单点击“复制好友邀请”，自行发给同一局域网的朋友。朋友从链接或邀请码加入。
-5. 空位自动补 AI，真人加入替换 AI；断线由 AI 接管，房主断线后移交现有真人。房主可重开，关闭开服窗口 / Ctrl+C 停服。
+选择「在线房间」创建4v4 / 8v8对战，或通过好友邀请链接、房间码加入。空位由 AI 补齐；房主可重开，离开后移交下一位玩家。联机只使用中央在线服务，不要求玩家部署服务或处于同一网络。
 
-默认 `0.0.0.0:8787`。自定义端口：`start-fps-lan.cmd --port 8788`；仅本机：`--host 127.0.0.1`。不修改防火墙或做公网映射。无剪贴板 API 时提供可选中的邀请文字；多网卡时可选择开服窗口显示的私有地址。没有公网匹配、持久账号、NAT 穿透或专业反作弊。
+本项目根目录 `npm run online:start` 为两款游戏提供统一服务；生产使用同域 HTTPS / WSS，配置为 `racing-online.config.json`。本分支服务更新前，旧生产站点的运输船在线后端尚不可用。部署与回滚见 `docs/online-deployment.md`。
 
 ## 架构与验证
 
-`sim.js` 在浏览器和 LAN Node 服务复用，60Hz 固定步长；移动、射线遮挡、伤害、出生点选枪和计分由同一模拟判定。AI 使用带玩家净空的 A* 与视线/反应判断。LAN 每秒广播 20 次快照，客户端平滑位置和即时响应视角。未实现移动预测、回滚与延迟补偿。
+`sim.js` 在浏览器和中央 Node 在线服务复用，60Hz 固定步长；移动、射线遮挡、伤害、出生点选枪和计分由同一模拟判定。AI 使用带玩家净空的 A* 与视线/反应判断。在线服务每秒广播 20 次快照，客户端平滑位置和即时响应视角。未实现移动预测、回滚与延迟补偿。
 
 `npm ci --ignore-scripts` · `npm run check` · `npm run build`。
 
@@ -66,9 +62,9 @@ Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides
 - `node --test tests/fps-community-skins.test.mjs tests/fps-character-death.test.mjs`：社区模型原始字节、语义访问器和骨架一致性；两队真实蒙皮模型布娃娃的接地、关节、骨长、暂停、冻结与复活。
 - `node scripts/prepare-original-skins.mjs repack games/freight-fire/assets/viewmodel-cs2/original/recipe.json`：使用随仓库提供的源 JPEG 重建三份派生 GLB，拒绝源哈希或非颜色数据改变。
 
-报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；尚未在两台实体 LAN 电脑上验收。
+报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；本机双客户端验证不能代表真实公网网络质量。
 
-`dist/` 为完整静态大厅。获取公开仓库后执行 `npm ci`、`npm run build` 即可生成；`npm run lan:fps` 启动局域网服务。当前素材与历史来源说明见 [素材署名](./credits.html) 与根目录 `THIRD_PARTY_NOTICES.md`。
+`dist/` 为完整静态大厅。获取公开仓库后执行 `npm ci`、`npm run build` 即可生成；`npm run online:start` 启动中央在线服务。当前素材与历史来源说明见 [素材署名](./credits.html) 与根目录 `THIRD_PARTY_NOTICES.md`。
 
 ## 大厅封面
 

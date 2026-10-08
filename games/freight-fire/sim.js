@@ -227,7 +227,7 @@ class PathHeap{
  push(index,rank){const item={index,rank};let at=this.items.length;this.items.push(item);while(at>0){const parent=(at-1)>>1;if(this.items[parent].rank<=rank)break;this.items[at]=this.items[parent];at=parent;}this.items[at]=item;}
  pop(){const first=this.items[0],last=this.items.pop();if(this.items.length){let at=0;while(at*2+1<this.items.length){let child=at*2+1;if(child+1<this.items.length&&this.items[child+1].rank<this.items[child].rank)child++;if(this.items[child].rank>=last.rank)break;this.items[at]=this.items[child];at=child;}this.items[at]=last;}return first.index;}
 }
-/** A* with diagonal corner checks, used by bots on both the static and LAN builds. */
+/** A* with diagonal corner checks, used by bots on both the offline and online builds. */
 export function findPath(from, to) {
   if (walkSegment(from, to)) return [{ x: to.x, z: to.z }];
   const start = nearestCell(from.x, from.z), end = nearestCell(to.x, to.z);

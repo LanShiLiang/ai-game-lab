@@ -1,6 +1,5 @@
 import { createServer } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
-import { networkInterfaces, hostname } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,26 +24,7 @@ const WEAPONS = new Set(['m4a1', 'ak47', 'awp', 'usp', 'knife']);
 const ROOM_TOKEN = /^[A-Za-z0-9_-]{16}$/;
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 
-function isPrivateIpv4(value) {
-  const octets = value.split('.').map(Number);
-  return octets.length === 4 && octets.every(n => Number.isInteger(n) && n >= 0 && n <= 255)
-    && (octets[0] === 10 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
-      || (octets[0] === 192 && octets[1] === 168));
-}
-
-export function lanAddresses() {
-  const addresses = new Set();
-  for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries || []) {
-      if ((entry.family === 'IPv4' || entry.family === 4) && !entry.internal && isPrivateIpv4(entry.address)) {
-        addresses.add(entry.address);
-      }
-    }
-  }
-  return [...addresses].sort();
-}
-
-/** Only the lobby and runtime game assets are published by the LAN host. */
+/** Only the lobby and runtime game assets are published by the online service. */
 export function resolvePublicFile(base, rawUrl) {
   let pathname;
   try { pathname = decodeURIComponent(rawUrl.split('?')[0]); } catch { return null; }
@@ -110,25 +90,14 @@ function cleanInput(input) {
 
 function isLoopback(host) { return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(host); }
 
-function validUpgradeOrigin(request, bindHost, port) {
-  let target;
-  try { target = new URL(`http://${request.headers.host}`); } catch { return false; }
-  const localHosts = new Set(['localhost', '127.0.0.1', '[::1]', hostname().toLowerCase(), ...lanAddresses()]);
-  if (!['0.0.0.0', '::'].includes(bindHost)) localHosts.add(bindHost.toLowerCase());
-  if (!localHosts.has(target.hostname.toLowerCase()) || Number(target.port || 80) !== port) return false;
-  if (!request.headers.origin) return isLoopback(request.socket.remoteAddress?.replace(/^::ffff:/, '') || '');
-  try {
-    const origin = new URL(request.headers.origin);
-    return ['http:', 'https:'].includes(origin.protocol)
-      && (origin.host.toLowerCase() === target.host.toLowerCase()
-        || (isLoopback(origin.hostname) && isLoopback(target.hostname) && origin.port === target.port));
-  } catch { return false; }
+function validUpgradeOrigin(request, publicBaseURL){
+ try{const target=new URL('http://'+request.headers.host);if(!request.headers.origin)return false;const origin=new URL(request.headers.origin);return ['http:','https:'].includes(origin.protocol)&&(origin.host===target.host||(publicBaseURL&&origin.origin===new URL(publicBaseURL).origin)||(isLoopback(origin.hostname)&&isLoopback(target.hostname)&&origin.port===target.port));}catch{return false;}
 }
 
 /** Starts a static host plus authoritative FPS matches; never edits firewall settings. */
-export async function startLanServer({
-  port = 8787, host = '0.0.0.0', root = projectRoot,
-  heartbeatIntervalMs = 15_000, roomIdleMs = 60_000, maxRooms = 32, maxConnections = 256
+export async function startFpsServer({
+  port = 8791, host = '127.0.0.1', root = projectRoot, server: sharedServer = null, publicBaseURL = '',
+  heartbeatIntervalMs = 15_000, roomIdleMs = 60_000, maxRooms = 3, maxConnections = 256
 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Port must be an integer from 0 to 65535.');
   const base = await realpath(root);
@@ -143,7 +112,8 @@ export async function startLanServer({
     });
     response.end(head ? undefined : body);
   };
-  const server = createServer(async (request, response) => {
+  const handleRequest = async (request, response) => {
+    if(sharedServer&&!String(request.url).startsWith('/api/fps/'))return;
     if (!['GET', 'HEAD'].includes(request.method)) {
       response.writeHead(405, { Allow: 'GET, HEAD' }); response.end(); return;
     }
@@ -151,7 +121,7 @@ export async function startLanServer({
     try { url = new URL(request.url || '/', 'http://127.0.0.1'); } catch { json(response, 400, { error: 'Bad request' }); return; }
     const head = request.method === 'HEAD';
     if (url.pathname === '/api/fps/health') {
-      json(response, 200, { ok: true, protocol: 1, rooms: rooms.size, roomSizes: [4, 8] }, head); return;
+      json(response, 200, { ok: true, online: true, protocol: 1, rooms: rooms.size, maxRooms, roomSizes: [4, 8] }, head); return;
     }
     if (url.pathname === '/api/fps/rooms') {
       json(response, 200, { rooms: [...rooms.values()].filter(room => room.members.size).map(publicSummary) }, head); return;
@@ -159,11 +129,8 @@ export async function startLanServer({
     if (url.pathname === '/api/fps/invites') {
       const room = rooms.get(url.searchParams.get('room'));
       if (!room) { json(response, 404, { error: 'Room not found' }, head); return; }
-      const suffix = `${gameEntry}?room=${room.id}`;
-      json(response, 200, {
-        roomId: room.id, local: `http://localhost:${actualPort}${suffix}`,
-        lan: lanAddresses().map(address => `http://${address}:${actualPort}${suffix}`)
-      }, head); return;
+      const suffix = `games/freight-fire/?online=1&room=${room.id}`;
+      json(response, 200, {roomId:room.id,invite:publicBaseURL?new URL(suffix,publicBaseURL.endsWith('/')?publicBaseURL:publicBaseURL+'/').href:suffix}, head);return;
     }
     const filename = resolvePublicFile(base, request.url || '/');
     if (!filename) { json(response, 404, { error: 'Not found' }, head); return; }
@@ -180,7 +147,8 @@ export async function startLanServer({
       });
       response.end(head ? undefined : data);
     } catch { json(response, 404, { error: 'Not found' }, head); }
-  });
+  };
+  const server=sharedServer||createServer(handleRequest);if(sharedServer)server.on('request',handleRequest);
   server.requestTimeout = 10_000;
   server.headersTimeout = 10_000;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8192, perMessageDeflate: false });
@@ -206,14 +174,15 @@ export async function startLanServer({
     room.hostId ||= player.id;
     send(socket, {
       type: 'joined', roomId: room.id, playerId: player.id, hostId: room.hostId,
-      size: room.size, humanCount: room.members.size, snapshot: room.match.snapshot(), invite: `${gameEntry}?room=${room.id}`
+      size: room.size, humanCount: room.members.size, snapshot: room.match.snapshot(), invite: `games/freight-fire/?online=1&room=${room.id}`
     });
     for (const member of room.members.values()) send(member, { type: 'room', ...publicSummary(room) });
   };
-  server.on('upgrade', (request, socket, head) => {
+  const handleUpgrade = (request, socket, head) => {
     let pathname;
     try { pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname; } catch { pathname = ''; }
-    if (pathname !== '/fps' || closing || !validUpgradeOrigin(request, host, actualPort)) {
+    if(sharedServer&&pathname!=='/fps')return;
+    if (pathname !== '/fps' || closing || !validUpgradeOrigin(request, publicBaseURL)) {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return;
     }
     const fromAddress = request.socket.remoteAddress;
@@ -224,7 +193,7 @@ export async function startLanServer({
       client.remoteAddress = fromAddress;
       wss.emit('connection', client, request);
     });
-  });
+  };server.on('upgrade',handleUpgrade);
   wss.on('connection', socket => {
     socket.alive = true; socket.tokens = 180; socket.tokenTime = performance.now();
     socket.roomActions = []; socket.roomId = null; socket.playerId = null;
@@ -325,38 +294,17 @@ export async function startLanServer({
     closing = true; timers.forEach(clearInterval);
     for (const socket of wss.clients) socket.terminate();
     await new Promise(resolve => wss.close(resolve));
-    await new Promise(resolve => server.close(resolve));
-    server.closeAllConnections?.();
+    server.removeListener('upgrade',handleUpgrade);if(sharedServer)server.removeListener('request',handleRequest);
+    else{await new Promise(resolve => server.close(resolve));server.closeAllConnections?.();}
     rooms.clear();
   };
   try {
-    await new Promise((resolve, reject) => {
+    if(!sharedServer)await new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(port, host, () => { server.removeListener('error', reject); resolve(); });
     });
-    actualPort = server.address().port;
+    actualPort = server.address()?.port||port;
   } catch (error) { await close(); throw error; }
   return { server, wss, rooms, close, port: actualPort };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2);
-  let port = 8787; let host = '0.0.0.0';
-  try {
-    for (let index = 0; index < args.length; index++) {
-      if (args[index] === '--port') port = Number(args[++index]);
-      else if (args[index] === '--host') host = args[++index];
-      else throw new Error(`Unknown option: ${args[index]}`);
-    }
-    if (!Number.isInteger(port) || port < 1 || port > 65535 || !host) throw new Error('Use --port 1..65535 and a valid --host.');
-    const running = await startLanServer({ port, host });
-    console.log(`\nFreight Fire LAN host\nLobby: http://localhost:${running.port}\nGame: http://localhost:${running.port}${gameEntry}`);
-    for (const address of lanAddresses()) console.log(`LAN: http://${address}:${running.port}${gameEntry}`);
-    console.log('\nKeep this window open. Ctrl+C stops the host.\nNo firewall rules or router settings have been changed.');
-    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => { await running.close(); process.exitCode = 0; });
-    running.server.on('error', error => { console.error(`Host error: ${error.message}`); process.exitCode = 1; });
-  } catch (error) {
-    console.error(`Unable to start LAN host: ${error.message}\nIf the port is busy, use --port 8788.`);
-    process.exitCode = 1;
-  }
-}

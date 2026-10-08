@@ -1,12 +1,12 @@
-以下安装与构建步骤针对 [独立 FPS 仓库](https://github.com/LanShiLiang/freight-fire)。在游戏实验室中使用 `npm run lan:fps` 开服。
+以下说明对应游戏实验室候选分支的运输船实现。中央在线服务在项目根目录运行。
 
 # 运输船 FPS / Freight Fire
 
 [在线试玩](https://lslzqco.cn/ai-game-lab/games/freight-fire/) · [GitHub 仓库](https://github.com/LanShiLiang/freight-fire)
 
-公网试玩提供人机对战；当前部署没有 FPS 局域网后端。源码保留完整本地 LAN 服务，可在自己的电脑运行。
+当前公网试玩仍是既有版本；本分支将运输船接入中央在线服务，公开可用性需在部署后另行验证。
 
-经典端游运输船的网页 FPS 练习作品，支持保卫者 / 潜伏者、4v4 / 8v8 人机与局域网对战。保留已认可的经典地图结构和绘制材质，本轮重构人物、配套枪手、死亡视角与战斗界面。与官方游戏无关联。
+经典端游运输船的网页 FPS 练习作品，支持保卫者 / 潜伏者、4v4 / 8v8 人机与在线房间对战。保留已认可的经典地图结构和绘制材质，本轮重构人物、配套枪手、死亡视角与战斗界面。与官方游戏无关联。
 
 ## 安装与运行
 
@@ -15,7 +15,7 @@ npm ci --ignore-scripts
 npm run dev
 ```
 
-打开终端显示的本地地址。`npm run check` 运行模拟、真实 WebSocket 和音频事件测试，并验证脚本、资源哈希与引用；`npm run build` 输出纯静态站点。Windows 局域网使用 `start-fps-lan.cmd`，或跨平台运行 `npm run lan:fps`。浏览器验收需要本机 Chrome；执行 `npm run test:fps:browser` 或 `npm run test:experience`，报告写到忽略的 `artifacts/`。浏览器套件依次运行，避免争抢焦点。
+打开终端显示的本地地址。`npm run check` 运行模拟、真实 WebSocket 和音频事件测试，并验证脚本、资源哈希与引用；`npm run build` 输出纯静态站点。浏览器验收需要本机 Chrome；执行 `npm run test:fps:browser` 或 `npm run test:experience`，报告写到忽略的 `artifacts/`。浏览器套件依次运行，避免争抢焦点。
 
 ## 当前素材与效果
 
@@ -58,19 +58,15 @@ npm run dev
 
 Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides_controls.html) 作为静步，已取消冲刺加速、动画和扩张视角。速度按本地图尺度调校，官网未提供可独立核验的绝对速度，当前不声称数值一比一。
 
-## Windows 局域网开服
+## 在线房间
 
-1. 安装官方 [Node.js](https://nodejs.org/) 20 或更高版本。
-2. 克隆本仓库，双击根目录 `start-fps-lan.cmd`。缺少依赖时仅执行锁定版本的 `npm ci --omit=dev --ignore-scripts`，首次安装需要网络。
-3. 开服电脑打开窗口显示的本机地址，选择“局域网好友”，创建 4v4 / 8v8 房间。
-4. 菜单点击“复制好友邀请”，自行发给同一局域网的朋友。朋友从链接或邀请码加入。
-5. 空位自动补 AI，真人加入替换 AI；断线由 AI 接管，房主断线后移交现有真人。房主可重开，关闭开服窗口 / Ctrl+C 停服。
+选择「在线房间」创建4v4 / 8v8对战，或通过好友邀请链接、房间码加入。空位由 AI 补齐；房主可重开，离开后移交下一位玩家。联机只使用中央在线服务，不要求玩家部署服务或处于同一网络。
 
-默认 `0.0.0.0:8787`。自定义端口：`start-fps-lan.cmd --port 8788`；仅本机：`--host 127.0.0.1`。不修改防火墙或做公网映射。无剪贴板 API 时提供可选中的邀请文字；多网卡时可选择开服窗口显示的私有地址。没有公网匹配、持久账号、NAT 穿透或专业反作弊。
+本项目根目录 `npm run online:start` 为两款游戏提供统一服务；生产使用同域 HTTPS / WSS，配置为 `racing-online.config.json`。本分支服务更新前，旧生产站点的运输船在线后端尚不可用。部署与回滚见 `docs/online-deployment.md`。
 
 ## 架构与验证
 
-`sim.js` 在浏览器和 LAN Node 服务复用，60Hz 固定步长；移动、射线遮挡、伤害、出生点选枪和计分由同一模拟判定。AI 使用带玩家净空的 A* 与视线/反应判断。LAN 每秒广播 20 次快照，客户端平滑位置和即时响应视角。未实现移动预测、回滚与延迟补偿。
+`sim.js` 在浏览器和中央 Node 在线服务复用，60Hz 固定步长；移动、射线遮挡、伤害、出生点选枪和计分由同一模拟判定。AI 使用带玩家净空的 A* 与视线/反应判断。在线服务每秒广播 20 次快照，客户端平滑位置和即时响应视角。未实现移动预测、回滚与延迟补偿。
 
 `npm ci --ignore-scripts` · `npm run check` · `npm run build`。
 
@@ -80,9 +76,9 @@ Shift 依照 [CrossFire 官方操作说明](https://crossfire.z8games.com/guides
 - `npm run test:experience`：游戏画面、手机横竖屏、触控操作、暂停恢复与结算后重新开局。
 - `npm run test:fps:animation`：原始蒙皮模型的连续射击 / 换弹、舒展倒地、冻结与复活诊断，并用真实开始 / 移动 / 开火输入检查可玩比赛。`npm test` 同时检查两队模型的骨长、增量动作、倒地连续性和冻结后的零物理更新。
 
-报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；尚未在两台实体 LAN 电脑上验收。
+报告与截图分别在 `artifacts/freight-rebuild/`、`artifacts/cs2-rig/`、`artifacts/characters-upgrade/`。采样验收不代表全部姿态与世界表面完全零相交；本机双客户端验证不能代表真实公网网络质量。
 
-`dist/` 只含运输船静态页面、当前资源和版权说明。`npm run preview` 预览构建；部署时保留整个目录结构。局域网功能须运行 Node 服务；纯静态站点提供人机模式。
+`dist/` 只含运输船静态页面、当前资源和版权说明。`npm run preview` 预览构建；部署时保留整个目录结构。在线房间须部署中央 Node 服务；纯静态站点可提供人机模式。
 
 独立源码只保留当前使用的 CS2 配套模型、音效、经典地图结构与必要材质，不包含旧枪手 / Rocketbox / 旧 CC0 枪声、其他游戏或研究仓库。完整来源见 [素材署名](../games/freight-fire/credits.html) 与根目录 `THIRD_PARTY_NOTICES.md`。
 
