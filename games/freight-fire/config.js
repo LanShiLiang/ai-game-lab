@@ -1,1 +1,0 @@
-export function fpsServiceBase(href=import.meta.url){const url=new URL(href),at=url.pathname.lastIndexOf('/games/freight-fire/');url.pathname=at>=0?url.pathname.slice(0,at+1):'/';url.search='';url.hash='';return url;}
