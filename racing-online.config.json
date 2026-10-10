@@ -1,9 +1,0 @@
-{
-  "port": 8790,
-  "host": "127.0.0.1",
-  "maxRooms": 3,
-  "roomTtlMs": 28800000,
-  "online": true,
-  "serveLab": true,
-  "publicBaseURL": "https://lslzqco.cn/ai-game-lab/"
-}
