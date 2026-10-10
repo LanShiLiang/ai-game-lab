@@ -1,3 +1,4 @@
+import {readReleasePointer} from './pointers.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import {lstat, realpath, mkdir, writeFile, rename, readFile, rm} from 'node:fs/promises';
@@ -258,14 +259,7 @@ export async function startCurrentGateway(options = {}) {
   const stateDir = await realpath(options.stateDir);
   const releasesRoot = path.join(stateDir, 'releases');
   const settings = {...options, runtimeDir: options.runtimeDir ?? path.join(stateDir, 'run')};
-  async function currentSelection() {
-    const current = path.join(stateDir, 'current');
-    const link = await lstat(current);
-    if (!link.isSymbolicLink()) throw new Error('current must be a symlink to a prepared release');
-    const target = await realpath(current);
-    if (!isInside(releasesRoot, target) || target === releasesRoot) throw new Error('current symlink escapes the releases directory');
-    return {target, token: `${link.dev}:${link.ino}:${link.mtimeMs}:${link.ctimeMs}`};
-  }
+  async function currentSelection() {return readReleasePointer(stateDir,'current',{optional:false});}
   const currentTarget = async () => (await currentSelection()).target;
   const initialSelection = await currentSelection();
   const first = initialSelection.target;

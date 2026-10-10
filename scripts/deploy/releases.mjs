@@ -1,3 +1,4 @@
+import {readReleasePointer,writeReleasePointer} from '../../services/gateway/pointers.mjs';
 import {precompressPublic} from './compression.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdir,cp,readFile,writeFile,rename,symlink,readlink,lstat,realpath,rm,stat} from 'node:fs/promises';
@@ -40,8 +41,8 @@ export async function verifyRelease(state,releaseId){
  if(integrity.schemaVersion!==1||integrity.digest!==digest(JSON.stringify(files))||JSON.stringify(integrity.files)!==JSON.stringify(files))throw Error('Release integrity verification failed');
  const lock=await readJSON(path.join(actual,'release-lock.json'));if(lock.releaseId!==releaseId)throw Error('Release identity mismatch');return {directory:actual,lock};
 }
-async function currentTarget(state,name){const link=path.join(state,name);const info=await lstat(link).catch(()=>null);if(!info)return null;if(!info.isSymbolicLink())throw Error(name+' must be a symlink');const actual=await realpath(link),base=await realpath(path.join(state,'releases'));if(!inside(base,actual)||actual===base)throw Error('Unsafe '+name+' link');return actual;}
-async function switchLink(state,name,target){const pending=path.join(state,'.'+name+'-'+randomUUID());await symlink(target,pending,'dir');await rename(pending,path.join(state,name));}
+async function currentTarget(state,name){return (await readReleasePointer(state,name))?.target||null;}
+async function switchLink(state,name,target){await writeReleasePointer(state,name,target);}
 function statusTime(value){return typeof value==='number'?value:Date.parse(value);}
 async function gatewayStatus(state){const file=path.join(state,'run/gateway-status.json');let status;try{status=await readJSON(file);}catch(error){if(error.code==='ENOENT')return null;throw Error('Invalid gateway status');}
  if(!Number.isInteger(status.pid)||status.pid<=0||typeof status.instanceId!=='string'||!status.instanceId)throw Error('Invalid gateway status identity');

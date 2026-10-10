@@ -2,6 +2,7 @@ import {readFile,writeFile,mkdir,readdir,lstat,realpath,rename,rm,open} from 'no
 import {createHash,randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {root} from '../catalog.mjs';
 const exec=promisify(execFile);
@@ -17,7 +18,7 @@ export async function stateDirectory(value){
  if(inside(await realpath(root),actual)||inside(actual,await realpath(root)))throw Error('Deployment state resolves into the platform repository');
  return actual;
 }
-export async function run(command,args,options={}){return (await exec(command,args,{encoding:'utf8',maxBuffer:8*1024*1024,timeout:120000,...options})).stdout.trim();}
+export async function run(command,args,options={}){if(process.platform==='win32'&&/^npm(?:\.cmd)?$/i.test(command)){const cli=[path.dirname(process.execPath),...(process.env.PATH||'').split(path.delimiter)].map(dir=>path.join(dir,'node_modules/npm/bin/npm-cli.js')).find(existsSync);if(!cli)throw Error('Cannot locate npm CLI; install Node with npm');args=[cli,...args];command=process.execPath;}return (await exec(command,args,{encoding:'utf8',maxBuffer:8*1024*1024,timeout:120000,...options})).stdout.trim();}
 export async function runBytes(command,args,options={}){return (await exec(command,args,{encoding:'buffer',maxBuffer:16*1024*1024,timeout:120000,...options})).stdout;}
 export async function withStateLock(state,action){const file=path.join(state,'deployment.lock');let handle;try{handle=await open(file,'wx');}catch(error){if(error.code==='EEXIST')throw Error('Another deployment operation holds the state lock; inspect it before retrying');throw error;}try{await handle.writeFile(JSON.stringify({pid:process.pid,createdAt:new Date().toISOString()}));return await action();}finally{await handle.close();await rm(file,{force:true});}}
 export async function checksums(folder){
@@ -37,11 +38,12 @@ export async function validateDistribution(folder,game){
   for(const key of ['healthPath','httpPrefixes','websocketPaths'])if(JSON.stringify(m.service[key])!==JSON.stringify(expected[key]))throw Error('Service route differs from trusted registry: '+key);}
  return {manifest:m,files,digest:digest(JSON.stringify(files))};
 }
+export function archiveEntryBytes(line){const fields=line.trim().split(/\s+/),value=fields[1]?.includes('/')?fields[2]:fields[4];if(!/^\d+$/.test(value))throw Error('Invalid archive listing');const bytes=Number(value);if(!Number.isSafeInteger(bytes))throw Error('Invalid archive size');return bytes;}
 export async function extractArchive(archive,destination){
  // Validate archive paths, entry types and total expanded size before extraction.
- const names=(await run('tar',['-tf',archive])).split('\n').filter(Boolean),details=(await run('tar',['-tvf',archive])).split('\n').filter(Boolean);
+ const names=(await run('tar',['-tf',archive])).split(/\r?\n/).filter(Boolean),details=(await run('tar',['-tvf',archive])).split(/\r?\n/).filter(Boolean);
  if(names.length>30000||details.some(line=>!['-','d'].includes(line[0])))throw Error('Archive contains links or unsupported entries');
- let size=0;for(const line of details){const bytes=Number(line.trim().split(/\s+/)[2]);if(!Number.isFinite(bytes))throw Error('Invalid archive listing');size+=bytes;}
+ let size=0;for(const line of details){size+=archiveEntryBytes(line);}
  if(size>1024*1024*1024)throw Error('Archive expands beyond 1 GiB limit');
  for(let name of names){while(name.startsWith('./'))name=name.slice(2);if(name.endsWith('/'))name=name.slice(0,-1);if(!name)continue;if(!safeRelative(name)||name.split('/').some(part=>part==='.git'||part==='.env'||part.startsWith('.env.')))throw Error('Unsafe archive path');}
  await mkdir(destination,{recursive:true});await run('tar',['-xf',archive,'-C',destination,'--no-same-owner','--no-same-permissions']);

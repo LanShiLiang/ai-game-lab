@@ -20,7 +20,8 @@
     "deploy:activate": "node scripts/deploy.mjs activate",
     "deploy:rollback": "node scripts/deploy.mjs rollback",
     "start": "node services/gateway/index.mjs",
-    "test:integration": "node scripts/integration-check.mjs"
+    "test:integration": "node scripts/integration-check.mjs",
+    "stop": "node scripts/stop.mjs"
   },
   "devDependencies": {
     "ws": "8.22.0"

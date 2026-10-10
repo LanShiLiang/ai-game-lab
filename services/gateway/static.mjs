@@ -93,7 +93,7 @@ export async function serveStatic(files, pathname, request, response) {
     }
     if (request.method === 'HEAD') { response.writeHead(200); response.end(); return; }
     const stream = handle.createReadStream({autoClose: true});
-    handle = null;
+    // Retain the FileHandle until pipeline settles, including aborted responses.
     response.writeHead(200);
     await pipeline(stream, response);
   } catch {

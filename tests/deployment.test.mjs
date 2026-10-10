@@ -1,3 +1,4 @@
+import {readReleasePointer} from '../services/gateway/pointers.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,rm,stat,realpath,symlink,cp} from 'node:fs/promises';
@@ -33,15 +34,15 @@ test('deployment resolves once, locks exact SHA, builds outside platform and reu
  const next=await prepareRelease({...f.options,releaseId:'next'});assert.notEqual(next.lock.games[0].commit,sourceSHA);assert.notEqual(next.lock.games[0].cacheKey,first.lock.games[0].cacheKey);assert.equal(next.lock.games[0].cacheHit,false);assert.equal(first.lock.games[0].commit,sourceSHA);
 });
 test('fetch/ref/build/probe failures never replace current; activation and rollback are atomic',async t=>{
- const f=await fixture(t);await prepareRelease({...f.options,releaseId:'good'});await activateRelease({stateDir:f.state,releaseId:'good',probe:async()=>{}});const current=await realpath(path.join(f.state,'current'));
- const registry=await readJSON(f.registryFile);registry.games[0].ref='does-not-exist';await saveJSON(f.registryFile,registry);await assert.rejects(()=>prepareRelease({...f.options,releaseId:'bad-ref'}));assert.equal(await realpath(path.join(f.state,'current')),current);
+ const f=await fixture(t);await prepareRelease({...f.options,releaseId:'good'});await activateRelease({stateDir:f.state,releaseId:'good',probe:async()=>{}});const current=(await readReleasePointer(f.state,'current')).target;
+ const registry=await readJSON(f.registryFile);registry.games[0].ref='does-not-exist';await saveJSON(f.registryFile,registry);await assert.rejects(()=>prepareRelease({...f.options,releaseId:'bad-ref'}));assert.equal((await readReleasePointer(f.state,'current')).target,current);
  registry.games[0].ref='main';registry.games[0].allowSourceBuild=false;await saveJSON(f.registryFile,registry);
  // Clear cache only in this isolated fixture to exercise denied source fallback.
- await rm(path.join(f.state,'cache'),{recursive:true});await assert.rejects(()=>prepareRelease({...f.options,releaseId:'denied-build'}),/not authorized/);assert.equal(await realpath(path.join(f.state,'current')),current);
+ await rm(path.join(f.state,'cache'),{recursive:true});await assert.rejects(()=>prepareRelease({...f.options,releaseId:'denied-build'}),/not authorized/);assert.equal((await readReleasePointer(f.state,'current')).target,current);
  registry.games[0].allowSourceBuild=true;await saveJSON(f.registryFile,registry);await prepareRelease({...f.options,releaseId:'good-two'});
- await assert.rejects(()=>activateRelease({stateDir:f.state,releaseId:'good-two',probe:async()=>{throw Error('health failed');}}),/health failed/);assert.equal(await realpath(path.join(f.state,'current')),current);
- await activateRelease({stateDir:f.state,releaseId:'good-two',probe:async()=>{}});assert.equal(path.basename(await realpath(path.join(f.state,'current'))),'good-two');await rollbackRelease({stateDir:f.state,probe:async()=>{}});assert.equal(await realpath(path.join(f.state,'current')),current);
- await writeFile(path.join(f.source,'build.mjs'),"throw Error('intentional build failure');\n");await run('git',['add','.'],{cwd:f.source});await run('git',['-c','user.name=Test','-c','user.email=test@localhost','commit','-m','failing build'],{cwd:f.source});await assert.rejects(()=>prepareRelease({...f.options,releaseId:'broken-build'}),/intentional build failure/);assert.equal(await realpath(path.join(f.state,'current')),current);
+ await assert.rejects(()=>activateRelease({stateDir:f.state,releaseId:'good-two',probe:async()=>{throw Error('health failed');}}),/health failed/);assert.equal((await readReleasePointer(f.state,'current')).target,current);
+ await activateRelease({stateDir:f.state,releaseId:'good-two',probe:async()=>{}});assert.equal(path.basename((await readReleasePointer(f.state,'current')).target),'good-two');await rollbackRelease({stateDir:f.state,probe:async()=>{}});assert.equal((await readReleasePointer(f.state,'current')).target,current);
+ await writeFile(path.join(f.source,'build.mjs'),"throw Error('intentional build failure');\n");await run('git',['add','.'],{cwd:f.source});await run('git',['-c','user.name=Test','-c','user.email=test@localhost','commit','-m','failing build'],{cwd:f.source});await assert.rejects(()=>prepareRelease({...f.options,releaseId:'broken-build'}),/intentional build failure/);assert.equal((await readReleasePointer(f.state,'current')).target,current);
 });
 test('release and cache tampering are detected before activation or reuse',async t=>{
  const f=await fixture(t),release=await prepareRelease({...f.options,releaseId:'clean'});await writeFile(path.join(release.directory,'public/index.html'),'tampered');await assert.rejects(()=>verifyRelease(f.state,'clean'),/integrity/);
@@ -54,7 +55,7 @@ test('release provenance binds archive bytes, repository, commit, game and lockf
 });
 test('source-build environment excludes secrets and archive extraction refuses links',async t=>{
  const f=await fixture(t),old=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='test-secret';try{assert.equal(buildEnvironment(f.state).GITHUB_TOKEN,undefined);}finally{if(old===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=old;}
- const malicious=path.join(f.base,'malicious');await mkdir(malicious);await symlink('/etc/passwd',path.join(malicious,'link'));const archive=path.join(f.base,'bad.tar');await run('tar',['-cf',archive,'-C',malicious,'.']);await assert.rejects(()=>extractArchive(archive,path.join(f.base,'unpacked')),/links/);
+ const archive=path.join(f.base,'bad.tar');const header=Buffer.alloc(512);header.write('link');header.write('0000777',100);header.write('0000000',108);header.write('0000000',116);header.write('00000000000',124);header.write('00000000000',136);header.fill(32,148,156);header[156]=50;header.write('/etc/passwd',157);header.write('ustar\0',257);header.write('00',263);const sum=header.reduce((a,b)=>a+b,0);header.write(sum.toString(8).padStart(6,'0')+'\0 ',148);await writeFile(archive,Buffer.concat([header,Buffer.alloc(1024)]));await assert.rejects(()=>extractArchive(archive,path.join(f.base,'unpacked')),/links/);
  await assert.rejects(()=>stateDirectory(path.join(root,'bad-state')),/outside/);
 });
 
@@ -62,17 +63,17 @@ test('live activation waits for the same gateway instance; failures and timeouts
  const f=await fixture(t);await prepareRelease({...f.options,releaseId:'old'});await prepareRelease({...f.options,releaseId:'next'});await activateRelease({stateDir:f.state,releaseId:'old',probe:async()=>{}});await mkdir(path.join(f.state,'run'),{recursive:true});
  const file=path.join(f.state,'run/gateway-status.json'),identity={pid:process.pid,instanceId:'test-instance'},save=async data=>saveJSON(file,{...identity,releaseId:'old',ready:true,updatedAt:Date.now(),...data});
  await save({});
- const timer=setInterval(async()=>{if(path.basename(await realpath(path.join(f.state,'current')))==='next')await save({releaseId:'next',lastReload:{requestedReleaseId:'next',ok:true,at:Date.now()}});},25);let activated;
+ const timer=setInterval(async()=>{if(path.basename((await readReleasePointer(f.state,'current')).target)==='next')await save({releaseId:'next',lastReload:{requestedReleaseId:'next',ok:true,at:Date.now()}});},25);let activated;
  try{activated=await activateRelease({stateDir:f.state,releaseId:'next',probe:async()=>{},ackTimeoutMs:1000});}finally{clearInterval(timer);}
- assert.equal(activated.liveStatus,'ready');assert.equal(path.basename(await realpath(path.join(f.state,'current'))),'next');
+ assert.equal(activated.liveStatus,'ready');assert.equal(path.basename((await readReleasePointer(f.state,'current')).target),'next');
  await save({releaseId:'next'});
- const rejection=setInterval(async()=>{if(path.basename(await realpath(path.join(f.state,'current')))==='old')await save({releaseId:'next',lastReload:{requestedReleaseId:'old',ok:false,error:'occupied rooms',at:Date.now()}});},25);
+ const rejection=setInterval(async()=>{if(path.basename((await readReleasePointer(f.state,'current')).target)==='old')await save({releaseId:'next',lastReload:{requestedReleaseId:'old',ok:false,error:'occupied rooms',at:Date.now()}});},25);
  try{await assert.rejects(()=>activateRelease({stateDir:f.state,releaseId:'old',probe:async()=>{},ackTimeoutMs:1000}),/rejected release/);}finally{clearInterval(rejection);}
- assert.equal(path.basename(await realpath(path.join(f.state,'current'))),'next');
+ assert.equal(path.basename((await readReleasePointer(f.state,'current')).target),'next');
  await save({releaseId:'next'});
- const wrong=setInterval(async()=>{if(path.basename(await realpath(path.join(f.state,'current')))==='old')await save({instanceId:'another-instance',releaseId:'old'});},25);
+ const wrong=setInterval(async()=>{if(path.basename((await readReleasePointer(f.state,'current')).target)==='old')await save({instanceId:'another-instance',releaseId:'old'});},25);
  try{await assert.rejects(()=>activateRelease({stateDir:f.state,releaseId:'old',probe:async()=>{},ackTimeoutMs:180}),/acknowledge/);}finally{clearInterval(wrong);}
- assert.equal(path.basename(await realpath(path.join(f.state,'current'))),'next');
+ assert.equal(path.basename((await readReleasePointer(f.state,'current')).target),'next');
  await save({releaseId:'next',updatedAt:Date.now()-10000});await assert.rejects(()=>activateRelease({stateDir:f.state,releaseId:'old',probe:async()=>{}}),/stale/);
 });
 

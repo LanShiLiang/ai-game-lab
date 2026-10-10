@@ -77,3 +77,9 @@ activate 校验发布清单，真实启动并探测每个独立后端，探测�
 新游戏仓库尚未远程可读时，可用一个不提交的外部 registry 副本指定准确本地 Git 仓库路径并标记 publication:local，显式带 `--allow-local`。这只验证部署流水线，不冒称已经从远端下载。测试缓存和装配结果仍在平台仓库外；不能把本地路径提交成生产仓库地址。
 
 平台测试覆盖可信来源、版本锁/缓存、恶意归档、失败保持 current、原子回滚、纯平台边界、通用 HTTP/WS 网关和独立游戏组合。各游戏自己的回归由各自仓库执行。
+
+## Windows local acceptance
+
+Source checkout explicitly disables automatic newline conversion so dependency lock bytes match the selected Git object. npm runs through its Node CLI, without a command shell. Windows current/previous are atomic JSON pointer files identifying a validated direct child release and a unique selection; POSIX retains atomic symbolic links. The gateway accepts both representations and still verifies the complete release and live instance acknowledgement. Existing pointers of a different type require explicit migration; preparation does not delete them.
+
+Use npm start -- --state-dir D:\ChatGPTProject\ai-game-lab-state-windows-20261010 --port 8790. Stop this instance with npm stop -- --state-dir D:\ChatGPTProject\ai-game-lab-state-windows-20261010. The stop request is a local state file bound to the live PID and instance, with no public HTTP control route. Game children can also receive a parent-only IPC shutdown message on Windows. Do not force-kill a parent while leaving its children.

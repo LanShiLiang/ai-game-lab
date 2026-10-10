@@ -65,7 +65,7 @@ export async function obtainBuild(game,resolved,state){
  try{
   let built=await releaseArtifact(game,resolved,work);
   if(!built){if(!game.allowSourceBuild)throw Error('No verified immutable release artifact; source build is not authorized');
-   const source=path.join(work,'source');await run('git',['clone','--no-hardlinks','--no-checkout','--',resolved.mirror,source]);await run('git',['-C',source,'checkout','--detach',resolved.commit]);
+   const source=path.join(work,'source');await run('git',['clone','--no-hardlinks','--no-checkout','--',resolved.mirror,source]);await run('git',['-c','core.autocrlf=false','-c','core.eol=lf','-C',source,'checkout','--detach',resolved.commit]);
    const tracked=await run('git',['-C',source,'ls-files','--stage']);if(tracked.split('\n').some(line=>line.startsWith('120000 ')||line.startsWith('160000 ')))throw Error('Source build cannot contain symlinks or unreviewed submodules');
    if(digest(await readFile(path.join(source,'package-lock.json')))!==resolved.lockfileDigest)throw Error('Source dependency lock changed after resolution');
    const env=buildEnvironment(state);await mkdir(env.HOME,{recursive:true});

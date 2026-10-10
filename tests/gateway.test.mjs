@@ -1,3 +1,7 @@
+async function fixtureSymlink(t,target,file){const info=await lstat(target).catch(()=>null);await symlink(target,file,info?.isDirectory()?'dir':'file');defer(t,()=>unlink(file).catch(error=>{if(error.code!=='ENOENT')throw error;}));}
+const cleanupStacks=new WeakMap();
+function defer(t,fn){let stack=cleanupStacks.get(t);if(!stack){stack=[];cleanupStacks.set(t,stack);t.after(async()=>{const errors=[];for(const dispose of stack.reverse())try{await dispose();}catch(error){errors.push(error);}if(errors.length)throw new AggregateError(errors,'Fixture cleanup failed');});}stack.push(fn);}
+import {writeReleasePointer} from '../services/gateway/pointers.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -8,7 +12,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {gunzipSync, gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, writeFile, readdir, rm, symlink, rename} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, writeFile, readdir, rm, symlink, rename, realpath, lstat, unlink} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startGateway, probeRelease, startCurrentGateway} from '../services/gateway/index.mjs';
 
@@ -77,8 +81,8 @@ async function seal(directory) {
 }
 
 async function temporary(t) {
-  const root = await mkdtemp(path.join(tmpdir(), 'generic-gateway-test-'));
-  t.after(() => rm(root, {recursive: true, force: true}));
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'generic-gateway-test-')));
+  defer(t,() => rm(root, {recursive: true, force: true, maxRetries:5, retryDelay:100}));
   return root;
 }
 
@@ -94,10 +98,7 @@ function request(gateway, pathname = '/', headers = {}, method = 'GET', body = '
 }
 
 async function switchCurrent(state, releaseId) {
-  const temporary = path.join(state, 'current-next');
-  await rm(temporary, {force: true});
-  await symlink(path.join('releases', releaseId), temporary);
-  await rename(temporary, path.join(state, 'current'));
+  await writeReleasePointer(state,'current',path.join(state,'releases',releaseId));
 }
 
 function alive(pid) {
@@ -133,7 +134,7 @@ async function upgrade(gateway, {pathname = '/unit', origin, host} = {}) {
 test('generic gateway serves isolated public assets with prepared gzip, ETag and HEAD', async t => {
   const root = await temporary(t);
   const {directory} = await fixture(root, 'static', {noService: true});
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   assert.equal(gateway.releaseId, 'static'); assert.deepEqual(gateway.services, []);
   assert.equal((await request(gateway)).text, '<h1>static</h1>');
   for (const item of ['/src/app.js', '/_shared/bridge.js', '/games/fixture-game/', '/runtime-config.js']) assert.equal((await request(gateway, item)).status, 200, item);
@@ -162,15 +163,15 @@ test('static boundary rejects private files, traversal, symlinks and replaced as
   await writeFile(path.join(root, 'secret.txt'), 'outside secret');
   await writeFile(path.join(publicDir, 'replace.txt'), 'public content');
   await seal(directory);
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
-  await symlink(path.join(root, 'secret.txt'), path.join(publicDir, 'leak.txt'));
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
+  await fixtureSymlink(t,path.join(root, 'secret.txt'), path.join(publicDir, 'leak.txt'));
   for (const relative of [...forbidden, 'leak.txt', '../release-lock.json', '%2e%2e/games/fixture-game/server/index.mjs', 'games%2ffixture-game/server/index.mjs', 'a%5cb.js']) {
     const response = await request(gateway, '/' + relative);
     assert.ok([400, 404].includes(response.status), relative + ' status ' + response.status);
     assert.doesNotMatch(response.text, /secret/);
   }
   await rm(path.join(publicDir, 'replace.txt'));
-  await symlink(path.join(root, 'secret.txt'), path.join(publicDir, 'replace.txt'));
+  await fixtureSymlink(t,path.join(root, 'secret.txt'), path.join(publicDir, 'replace.txt'));
   assert.equal((await request(gateway, '/replace.txt')).status, 404);
 });
 
@@ -179,8 +180,8 @@ test('service launch is cwd-independent and proxy preserves safe Host/Origin, me
   const {directory} = await fixture(root);
   const runtimeDir = path.join(root, 'run');
   process.env.GATEWAY_TEST_SECRET = 'must-not-leak';
-  t.after(() => delete process.env.GATEWAY_TEST_SECRET);
-  const gateway = await startGateway({releaseDir: directory, runtimeDir, allowedOrigins: ['https://frontend.example']}); t.after(() => gateway.close());
+  defer(t,() => delete process.env.GATEWAY_TEST_SECRET);
+  const gateway = await startGateway({releaseDir: directory, runtimeDir, allowedOrigins: ['https://frontend.example']}); defer(t,() => gateway.close());
   assert.equal(gateway.services.length, 1); assert.equal(gateway.services[0].ready, true);
   const port = gateway.server.address().port;
   const response = await request(gateway, '/api/unit/echo?number=1', {origin: 'https://frontend.example', 'x-forwarded-for': 'spoofed', 'x-forwarded-host': 'attacker.example', 'x-forwarded-proto': 'https', connection: 'close, x-spoofed', 'x-spoofed': 'bad'}, 'POST', 'hello');
@@ -202,9 +203,9 @@ test('service launch is cwd-independent and proxy preserves safe Host/Origin, me
 
 test('generic WebSocket upgrade transparently proxies bytes and validates origins', async t => {
   const root = await temporary(t); const {directory} = await fixture(root);
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   const origin = `http://127.0.0.1:${gateway.server.address().port}`;
-  const accepted = await upgrade(gateway, {origin}); t.after(() => accepted.socket.destroy());
+  const accepted = await upgrade(gateway, {origin}); defer(t,() => accepted.socket.destroy());
   assert.match(accepted.headers, /^HTTP\/1.1 101/); assert.ok(accepted.headers.includes(`x-seen-origin: ${origin}`));
   const echoed = new Promise((resolve, reject) => { accepted.socket.once('data', resolve); accepted.socket.once('error', reject); });
   accepted.socket.write('transparent-upgrade-payload');
@@ -218,7 +219,7 @@ test('generic WebSocket upgrade transparently proxies bytes and validates origin
 
 test('public URL prefix is stripped for routing while canonical Host and Origin survive', async t => {
   const root = await temporary(t); const {directory} = await fixture(root, 'prefix', {publicBaseURL: 'https://games.example/lab/'});
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   const headers = {host: 'games.example', origin: 'https://games.example'};
   assert.equal((await request(gateway, '/lab/games/fixture-game/', headers)).status, 200);
   assert.equal((await request(gateway, '/games/fixture-game/', headers)).status, 200);
@@ -250,11 +251,11 @@ test('duplicate routes, unsafe service entries and escaping current symlinks fai
   }
   await writeFile(path.join(directory, 'release-lock.json'), JSON.stringify(lock));
   await seal(directory);
-  await symlink(directory, path.join(root, 'current'));
+  await fixtureSymlink(t,directory, path.join(root, 'current'));
   await assert.rejects(() => startCurrentGateway({stateDir: root}), /escapes/);
   await rm(path.join(directory, 'games/fixture-game/server/index.mjs'));
   await writeFile(path.join(root, 'outside.mjs'), fixtureSource);
-  await symlink(path.join(root, 'outside.mjs'), path.join(directory, 'games/fixture-game/server/index.mjs'));
+  await fixtureSymlink(t,path.join(root, 'outside.mjs'), path.join(directory, 'games/fixture-game/server/index.mjs'));
   await assert.rejects(() => probeRelease({releaseDir: directory}), /symlinks/);
 });
 
@@ -275,7 +276,7 @@ test('warm reload keeps old release available until ready, then atomically swaps
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   await fixture(releases, 'one'); await fixture(releases, 'two', {delay: 250});
   await switchCurrent(root, 'one');
-  const gateway = await startCurrentGateway({stateDir: root, watch: false}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, watch: false}); defer(t,() => gateway.close());
   const oldPid = gateway.services[0].pid;
   await switchCurrent(root, 'two'); const reloading = gateway.reload();
   await delay(60);
@@ -292,7 +293,7 @@ test('failed and superseded release reloads retain active bundle and clean candi
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   await fixture(releases, 'good'); const bad = await fixture(releases, 'bad', {unhealthy: true}); await fixture(releases, 'slow', {delay: 170});
   await switchCurrent(root, 'good');
-  const gateway = await startCurrentGateway({stateDir: root, watch: false, startupTimeoutMs: 1000}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, watch: false, startupTimeoutMs: 1000}); defer(t,() => gateway.close());
   const originalPid = gateway.services[0].pid;
   await switchCurrent(root, 'bad'); await assert.rejects(() => gateway.reload(), /timed out/);
   assert.equal(gateway.releaseId, 'good'); assert.equal(gateway.services[0].pid, originalPid); assert.equal((await request(gateway)).status, 200); assert.ok(gateway.lastReloadError);
@@ -306,7 +307,7 @@ test('failed and superseded release reloads retain active bundle and clean candi
 test('current symlink watcher activates a prepared release automatically', async t => {
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   await fixture(releases, 'watch-one', {noService: true}); await fixture(releases, 'watch-two', {noService: true}); await switchCurrent(root, 'watch-one');
-  const gateway = await startCurrentGateway({stateDir: root, pollIntervalMs: 25}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, pollIntervalMs: 25}); defer(t,() => gateway.close());
   await switchCurrent(root, 'watch-two'); await eventually(() => gateway.releaseId === 'watch-two');
   assert.equal((await request(gateway)).text, '<h1>watch-two</h1>');
 });
@@ -314,12 +315,12 @@ test('current symlink watcher activates a prepared release automatically', async
 test('CLI SIGTERM shuts down listener and child processes', async t => {
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   const release = await fixture(releases, 'cli'); await switchCurrent(root, 'cli');
-  const child = spawn(process.execPath, [fileURLToPath(new URL('../services/gateway/index.mjs', import.meta.url)), '--state-dir', root, '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe']});
-  t.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../services/gateway/index.mjs', import.meta.url)), '--state-dir', root, '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe', ...(process.platform==='win32'?['ipc']:[])]});
+  defer(t,() => { if (child.exitCode === null) child.kill('SIGKILL'); });
   let output = '', errors = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => errors += data);
   await eventually(() => output.includes('Gateway listening'), 5000);
   const pid = Number(await readFile(release.pidFile, 'utf8'));
-  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({code, signal}))); child.kill('SIGTERM');
+  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({code, signal}))); process.platform==='win32'?child.send({type:'shutdown'}):child.kill('SIGTERM');
   const outcome = await exited; assert.equal(outcome.code, 0, errors); assert.equal(outcome.signal, null); assert.equal(alive(pid), false); assert.deepEqual(await readdir(path.join(root, 'run')), []);
 });
 
@@ -343,7 +344,7 @@ test('integrity verification covers backend bytes, extra files and symlinks befo
   await writeFile(path.join(extra.directory, 'games/fixture-game/server/injected.mjs'), 'export const injected = true;');
   await assert.rejects(() => probeRelease({releaseDir: extra.directory}), /integrity verification failed/);
   const linked = await fixture(root, 'linked');
-  await symlink(path.join(root, 'extra'), path.join(linked.directory, 'public', 'escape'));
+  await fixtureSymlink(t,path.join(root, 'extra'), path.join(linked.directory, 'public', 'escape'));
   await assert.rejects(() => probeRelease({releaseDir: linked.directory}), /symlinks are forbidden/);
   const missing = await fixture(root, 'missing'); await rm(path.join(missing.directory, 'release-integrity.json'));
   await assert.rejects(() => probeRelease({releaseDir: missing.directory}), {code: 'ENOENT'});
@@ -354,7 +355,7 @@ test('client configuration modules remain public while backend config remains pr
   await writeFile(path.join(directory, 'public/games/fixture-game/config.js'), 'export const clientTuning = { speed: 4 };');
   await writeFile(path.join(directory, 'public/games/fixture-game/service.config.json'), '{"secret":"private"}');
   await seal(directory);
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   assert.equal((await request(gateway, '/games/fixture-game/config.js')).status, 200);
   assert.equal((await request(gateway, '/games/fixture-game/service.config.json')).status, 404);
 });
@@ -377,12 +378,12 @@ test('candidate failure cleans other ready services as well as the failing proce
 test('CLI SIGTERM during backend warmup also cleans detached children', async t => {
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   const release = await fixture(releases, 'slow-cli', {delay: 2000}); await switchCurrent(root, 'slow-cli');
-  const child = spawn(process.execPath, [fileURLToPath(new URL('../services/gateway/index.mjs', import.meta.url)), '--state-dir', root, '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe']});
-  t.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../services/gateway/index.mjs', import.meta.url)), '--state-dir', root, '--port', '0'], {cwd: root, stdio: ['ignore', 'pipe', 'pipe', ...(process.platform==='win32'?['ipc']:[])]});
+  defer(t,() => { if (child.exitCode === null) child.kill('SIGKILL'); });
   let output = '', errors = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => errors += data);
   await eventually(() => readFile(release.pidFile, 'utf8').then(() => true, () => false));
   const pid = Number(await readFile(release.pidFile, 'utf8'));
-  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({code, signal}))); child.kill('SIGTERM');
+  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({code, signal}))); process.platform==='win32'?child.send({type:'shutdown'}):child.kill('SIGTERM');
   const outcome = await exited;
   assert.equal(outcome.code, 0, errors); assert.equal(outcome.signal, null); assert.equal(alive(pid), false); assert.doesNotMatch(output, /Gateway listening/); assert.deepEqual(await readdir(path.join(root, 'run')), []);
 });
@@ -390,7 +391,7 @@ test('CLI SIGTERM during backend warmup also cleans detached children', async t 
 test('status acknowledges live activation and failures with current instance and timestamps', async t => {
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   await fixture(releases, 'ack-one'); await fixture(releases, 'ack-two'); await fixture(releases, 'ack-bad', {crash: true}); await switchCurrent(root, 'ack-one');
-  const gateway = await startCurrentGateway({stateDir: root, watch: false}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, watch: false}); defer(t,() => gateway.close());
   const status = () => readFile(gateway.statusFile, 'utf8').then(JSON.parse);
   let latest = await status();
   assert.equal(latest.pid, process.pid); assert.equal(latest.instanceId, gateway.instanceId); assert.equal(latest.releaseId, 'ack-one'); assert.equal(latest.ready, true); assert.ok(Date.parse(latest.updatedAt));
@@ -406,9 +407,9 @@ test('reload refuses occupied active rooms and preserves their process and WebSo
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   const roomsFile = path.join(root, 'rooms.txt'); await writeFile(roomsFile, '1');
   await fixture(releases, 'occupied', {roomsFile}); const candidate = await fixture(releases, 'candidate'); await switchCurrent(root, 'occupied');
-  const gateway = await startCurrentGateway({stateDir: root, watch: false}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, watch: false}); defer(t,() => gateway.close());
   const activePid = gateway.services[0].pid;
-  const websocket = await upgrade(gateway); t.after(() => websocket.socket.destroy());
+  const websocket = await upgrade(gateway); defer(t,() => websocket.socket.destroy());
   await switchCurrent(root, 'candidate'); await assert.rejects(() => gateway.reload(), /occupied rooms/);
   assert.equal(gateway.releaseId, 'occupied'); assert.equal(gateway.services[0].pid, activePid); assert.equal(alive(activePid), true);
   await assert.rejects(() => readFile(candidate.pidFile), {code: 'ENOENT'});
@@ -420,7 +421,7 @@ test('reload refuses occupied active rooms and preserves their process and WebSo
 test('watcher observes fresh selections of the same release, so activation retries get fresh acknowledgments', async t => {
   const root = await temporary(t); const releases = path.join(root, 'releases'); await mkdir(releases);
   await fixture(releases, 'same', {noService: true}); await switchCurrent(root, 'same');
-  const gateway = await startCurrentGateway({stateDir: root, pollIntervalMs: 25}); t.after(() => gateway.close());
+  const gateway = await startCurrentGateway({stateDir: root, pollIntervalMs: 25}); defer(t,() => gateway.close());
   const before = JSON.parse(await readFile(gateway.statusFile, 'utf8')).lastReload.at;
   await delay(10); await switchCurrent(root, 'same');
   await eventually(async () => JSON.parse(await readFile(gateway.statusFile, 'utf8')).lastReload.at !== before);
@@ -436,7 +437,7 @@ test('prepared GLB gzip has representation-specific ETag, HEAD length and identi
   await writeFile(path.join(directory, 'public/model.glb.gz'), packed);
   await writeFile(path.join(directory, 'public/no-gzip.glb'), source);
   await seal(directory);
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   const gzip = await request(gateway, '/model.glb', {'accept-encoding': 'gzip'});
   assert.equal(gzip.status, 200); assert.equal(gzip.headers['content-type'], 'model/gltf-binary');
   assert.equal(gzip.headers['content-encoding'], 'gzip'); assert.equal(gzip.headers.vary, 'Accept-Encoding');
@@ -452,7 +453,7 @@ test('prepared GLB gzip has representation-specific ETag, HEAD length and identi
   assert.equal(absent.status, 200); assert.equal(absent.headers['content-encoding'], undefined); assert.deepEqual(absent.body, source);
   assert.equal((await request(gateway, '/model.glb.gz')).status, 404);
   await rm(path.join(directory, 'public/model.glb.gz'));
-  await symlink(path.join(directory, 'public/no-gzip.glb'), path.join(directory, 'public/model.glb.gz'));
+  await fixtureSymlink(t,path.join(directory, 'public/no-gzip.glb'), path.join(directory, 'public/model.glb.gz'));
   assert.equal((await request(gateway, '/model.glb', {'accept-encoding': 'gzip'})).status, 404);
   assert.equal((await request(gateway, '/model.glb', {'accept-encoding': 'gzip'}, 'HEAD')).status, 404);
   assert.equal((await request(gateway, '/model.glb')).status, 200);
@@ -465,7 +466,7 @@ test('public license notices remain readable and conditional dates defer to ETag
   for (const name of ['LICENSE', 'NOTICE', 'COPYING', 'CREDITS.md']) await writeFile(path.join(directory, 'public', name), `${name}: public attribution`);
   await mkdir(path.join(directory, 'public/private'), {recursive: true}); await writeFile(path.join(directory, 'public/private/NOTICE'), 'private');
   await seal(directory);
-  const gateway = await startGateway({releaseDir: directory}); t.after(() => gateway.close());
+  const gateway = await startGateway({releaseDir: directory}); defer(t,() => gateway.close());
   for (const name of ['LICENSE', 'NOTICE', 'COPYING', 'CREDITS.md']) {
     const result = await request(gateway, '/' + name);
     assert.equal(result.status, 200); assert.equal(result.headers['content-type'], 'text/plain; charset=utf-8'); assert.match(result.text, /public attribution/);
@@ -478,3 +479,5 @@ test('public license notices remain readable and conditional dates defer to ETag
   assert.equal((await request(gateway, '/LICENSE', {'if-none-match': '"different"', 'if-modified-since': initial.headers['last-modified']})).status, 200);
   assert.equal((await request(gateway, '/LICENSE', {'if-none-match': initial.headers.etag, 'if-modified-since': 'Thu, 01 Jan 1970 00:00:00 GMT'})).status, 304);
 });
+
+test('instance-bound local stop exits the Windows gateway and all owned children',async t=>{const root=await temporary(t);await mkdir(path.join(root,'releases'));const release=await fixture(path.join(root,'releases'),'stop-cli');await switchCurrent(root,'stop-cli');const child=spawn(process.execPath,[fileURLToPath(new URL('../services/gateway/index.mjs',import.meta.url)),'--state-dir',root,'--port','0'],{stdio:['ignore','pipe','pipe']});defer(t,()=>{if(child.exitCode===null)child.kill('SIGKILL');});let logs='';child.stdout.on('data',data=>logs+=data);child.stderr.resume();await eventually(()=>logs.includes('Gateway listening'));const pid=Number(await readFile(release.pidFile,'utf8')),exited=new Promise(resolve=>child.once('exit',resolve));const {run}=await import('../scripts/deploy/common.mjs');assert.match(await run(process.execPath,[fileURLToPath(new URL('../scripts/stop.mjs',import.meta.url)),'--state-dir',root]),/stopped/);assert.equal(await exited,0);assert.equal(alive(pid),false);assert.deepEqual(await readdir(path.join(root,'run')),[]);});
