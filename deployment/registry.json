@@ -10,7 +10,7 @@
       "id": "freight-fire",
       "repository": "https://github.com/LanShiLiang/game-transport-ship.git",
       "publication": "published",
-      "ref": "6e203f81ca5da4b5690b0fa50ec93c6821f92cd4",
+      "ref": "3ed3512cc9edc924db12cde7b612eb3bfee0bb59",
       "allowSourceBuild": true,
       "releaseArtifacts": {
         "archive": "game-release.tgz",
@@ -27,8 +27,8 @@
         "healthPath": "/api/fps/health"
       },
       "verifiedPublication": {
-        "branch": "main",
-        "commit": "6e203f81ca5da4b5690b0fa50ec93c6821f92cd4"
+        "branch": "codex/windows-local-acceptance",
+        "commit": "3ed3512cc9edc924db12cde7b612eb3bfee0bb59"
       }
     },
     {
