@@ -1,8 +1,9 @@
+import {replaceFile} from './files.mjs';
 import {lstat,realpath,readFile,writeFile,symlink,rename,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 const inside=(parent,child)=>{const rel=path.relative(parent,child);return rel===''||(!rel.startsWith('..')&&!path.isAbsolute(rel));};
-async function atomicJSON(file,data){const temporary=file+'.tmp-'+randomUUID();try{await writeFile(temporary,JSON.stringify(data)+'\n',{mode:0o600});await rename(temporary,file);}finally{await rm(temporary,{force:true});}}
+async function atomicJSON(file,data){const temporary=file+'.tmp-'+randomUUID();try{await writeFile(temporary,JSON.stringify(data)+'\n',{mode:0o600});await replaceFile(temporary,file);}finally{await rm(temporary,{force:true});}}
 const valid = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/;
 export async function readReleasePointer(state,name,{optional=true}={}) {
  if(!['current','previous'].includes(name))throw Error('Invalid release pointer');

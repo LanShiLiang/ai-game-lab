@@ -1,3 +1,4 @@
+import {replaceFile} from './files.mjs';
 import {readReleasePointer} from './pointers.mjs';
 import http from 'node:http';
 import path from 'node:path';
@@ -278,7 +279,7 @@ export async function startCurrentGateway(options = {}) {
     const status = {pid: process.pid, instanceId, releaseId: api.releaseId, ready: api.services.every(service => service.ready), updatedAt: new Date().toISOString(), lastReload};
     statusWriting = statusWriting.catch(() => {}).then(async () => {
       const temporary = path.join(statusDirectory, `.gateway-status-${instanceId}-${randomUUID()}`);
-      try { await writeFile(temporary, JSON.stringify(status) + '\n', {mode: 0o600}); await rename(temporary, statusFile); }
+      try { await writeFile(temporary, JSON.stringify(status) + '\n', {mode: 0o600}); await replaceFile(temporary, statusFile); }
       finally { await rm(temporary, {force: true}); }
     });
     return statusWriting;

@@ -1,3 +1,4 @@
+import {replaceFile} from '../../services/gateway/files.mjs';
 import {readFile,writeFile,mkdir,readdir,lstat,realpath,rename,rm,open} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
@@ -49,5 +50,5 @@ export async function extractArchive(archive,destination){
  await mkdir(destination,{recursive:true});await run('tar',['-xf',archive,'-C',destination,'--no-same-owner','--no-same-permissions']);
  await checksums(destination);
 }
-export async function atomicJSON(file,value){const temporary=file+'.tmp-'+randomUUID();await saveJSON(temporary,value);await rename(temporary,file);}
+export async function atomicJSON(file,value){const temporary=file+'.tmp-'+randomUUID();await saveJSON(temporary,value);await replaceFile(temporary,file);}
 export async function discard(file){await rm(file,{recursive:true,force:true});}

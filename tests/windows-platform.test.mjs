@@ -8,3 +8,12 @@ test('cancelled static streams retain and explicitly close their FileHandle duri
   const {stderr} = await promisify(execFile)(process.execPath, ['--expose-gc', 'tests/static-abort-worker.mjs'], {cwd: new URL('..', import.meta.url), timeout: 30000});
   assert.equal(stderr, '');
 });
+
+test('Windows sharing locks retry bounded atomic replacement without removing the old file', async()=>{
+ const {replaceFile}=await import('../services/gateway/files.mjs');
+ let calls=0;const waits=[];
+ await replaceFile('new','old',{platform:'win32',operation:async()=>{if(++calls<3)throw Object.assign(new Error('Sharing lock'),{code:'EPERM'});},wait:async ms=>waits.push(ms)});
+ assert.equal(calls,3);assert.deepEqual(waits,[20,40]);
+ calls=0;await assert.rejects(replaceFile('new','old',{platform:'win32',operation:async()=>{calls++;throw Object.assign(new Error('Persistent denial'),{code:'EACCES'});},wait:async()=>{}}),/Persistent/);assert.equal(calls,8);
+ calls=0;await assert.rejects(replaceFile('new','old',{platform:'linux',operation:async()=>{calls++;throw Object.assign(new Error('Permission'),{code:'EPERM'});}}),/Permission/);assert.equal(calls,1);
+});
