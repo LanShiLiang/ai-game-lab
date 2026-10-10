@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "trustedRepositories": [
+    "https://github.com/LanShiLiang/game-transport-ship.git",
+    "https://github.com/LanShiLiang/game-apex-rush.git",
+    "https://github.com/LanShiLiang/game-orbit-dash.git"
+  ],
+  "games": [
+    {
+      "id": "freight-fire",
+      "repository": "https://github.com/LanShiLiang/game-transport-ship.git",
+      "publication": "published",
+      "ref": "6e203f81ca5da4b5690b0fa50ec93c6821f92cd4",
+      "allowSourceBuild": true,
+      "releaseArtifacts": {
+        "archive": "game-release.tgz",
+        "checksum": "game-release.sha256",
+        "provenance": "game-release.provenance.json"
+      },
+      "serviceRoutes": {
+        "httpPrefixes": [
+          "/api/fps/"
+        ],
+        "websocketPaths": [
+          "/fps"
+        ],
+        "healthPath": "/api/fps/health"
+      },
+      "verifiedPublication": {
+        "branch": "main",
+        "commit": "6e203f81ca5da4b5690b0fa50ec93c6821f92cd4"
+      }
+    },
+    {
+      "id": "apex-rush",
+      "repository": "https://github.com/LanShiLiang/game-apex-rush.git",
+      "publication": "published",
+      "ref": "757b94aaabc23f06e850ea18854b74376a6c6a9f",
+      "allowSourceBuild": true,
+      "releaseArtifacts": {
+        "archive": "game-release.tgz",
+        "checksum": "game-release.sha256",
+        "provenance": "game-release.provenance.json"
+      },
+      "serviceRoutes": {
+        "httpPrefixes": [
+          "/api/racing/"
+        ],
+        "websocketPaths": [
+          "/racing"
+        ],
+        "healthPath": "/api/racing/health"
+      },
+      "verifiedPublication": {
+        "branch": "main",
+        "commit": "757b94aaabc23f06e850ea18854b74376a6c6a9f"
+      }
+    },
+    {
+      "id": "orbit-dash",
+      "repository": "https://github.com/LanShiLiang/game-orbit-dash.git",
+      "publication": "published",
+      "ref": "53a6b1fbb1d208e925adce649a6f03cab396cafe",
+      "allowSourceBuild": true,
+      "releaseArtifacts": {
+        "archive": "game-release.tgz",
+        "checksum": "game-release.sha256",
+        "provenance": "game-release.provenance.json"
+      },
+      "serviceRoutes": null,
+      "verifiedPublication": {
+        "branch": "main",
+        "commit": "53a6b1fbb1d208e925adce649a6f03cab396cafe"
+      }
+    }
+  ]
+}

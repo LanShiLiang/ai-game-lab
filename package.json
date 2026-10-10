@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "A lightweight home for AI-made JavaScript game demos.",
+  "description": "Game platform, shared integration contracts, and deployment-time assembly of independent game repositories.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,20 +11,22 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
+    "build:web": "node scripts/build-web.mjs",
     "preview": "node scripts/serve.mjs --preview",
     "check": "node scripts/check.mjs && node scripts/test.mjs",
-    "new:game": "node scripts/new-game.mjs",
-    "test:display": "node scripts/lab-upgrade-qa.mjs",
-    "test:experience": "node scripts/play-experience-qa.mjs",
-    "test:fps:browser": "node scripts/fps-browser-qa.mjs --regression-only",
-    "test:racing:browser": "node scripts/racing-browser-qa.mjs",
-    "online:start": "node scripts/racing-server.mjs"
-  },
-  "dependencies": {
-    "three": "0.180.0",
-    "ws": "8.22.0"
+    "test": "node scripts/test.mjs",
+    "deploy:versions": "node scripts/deploy.mjs versions",
+    "deploy:prepare": "node scripts/deploy.mjs prepare",
+    "deploy:activate": "node scripts/deploy.mjs activate",
+    "deploy:rollback": "node scripts/deploy.mjs rollback",
+    "start": "node services/gateway/index.mjs",
+    "test:integration": "node scripts/integration-check.mjs"
   },
   "devDependencies": {
-    "playwright": "1.63.0"
-  }
+    "ws": "8.22.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }
