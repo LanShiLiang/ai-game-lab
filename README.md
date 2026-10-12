@@ -2,14 +2,11 @@
 
 一个放得下很多 JavaScript 游戏 demo 的轻量实验室。首页、每款游戏和新增模板互相独立；静态游玩无需账号或远程服务。多人对战仅使用中央在线房间服务。
 
-本机项目位置：`D:\ChatGPTProject\ai-game-lab`。
-
 ## 启动
 
 安装 Node.js 20 或更高版本，然后在 PowerShell 中运行：
 
 ```powershell
-cd D:\ChatGPTProject\ai-game-lab
 npm.cmd run dev
 ```
 
