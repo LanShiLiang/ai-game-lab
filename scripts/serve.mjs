@@ -1,3 +1,4 @@
+import {publicFilename,publicURLForFile,isContractRoute} from '../packages/game-contracts/public-files.mjs';
 import { createServer } from 'node:http';
 import { stat, realpath } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -21,22 +22,29 @@ export function resolveRequest(base, rawUrl) {
   if (!pathname.startsWith('/') || /[\\\0]/.test(pathname)) return null;
   const segments = pathname.split('/');
   if (segments.some((segment) => segment === '..' || segment.startsWith('.'))) return null;
-  if (!['', 'index.html', 'src', 'games', 'games.json'].includes(segments[1])) return null;
-  const filename = path.resolve(base, `.${pathname.endsWith('/') ? `${pathname}index.html` : pathname}`);
+  if (!['', 'index.html', 'src', 'games', 'games.json', '_shared'].includes(segments[1]) && !isContractRoute(pathname)) return null;
+  const filename = publicFilename(base,pathname);
   const relative = path.relative(base, filename);
   return relative.startsWith('..') || path.isAbsolute(relative) ? null : filename;
 }
 
-export function makeServer(base) {
+export function resolveArtifactRequest(base, rawUrl) {
+  let pathname;try {pathname=decodeURIComponent(rawUrl.split('?')[0]);}catch{return null;}
+  if(!pathname.startsWith('/') || /[\\\0]/.test(pathname) || pathname.split('/').some(part=>part==='..'||part.startsWith('.')) || /(?:^|\/)(?:package(?:-lock)?\.json|node_modules|scripts|services|tests)(?:\/|$)/.test(pathname))return null;
+  const file=path.resolve(base,'.'+(pathname.endsWith('/')?pathname+'index.html':pathname));
+  return types[path.extname(file)] && !path.relative(base,file).startsWith('..') ? file : null;
+}
+export function makeServer(base, {standalone=false}={}) {
+  const resolve=standalone?resolveArtifactRequest:resolveRequest;
   return createServer(async (request, response) => {
     if (!['GET', 'HEAD'].includes(request.method)) {
       response.writeHead(405, { Allow: 'GET, HEAD' }); response.end(); return;
     }
-    const filename = resolveRequest(base, request.url || '/');
+    const filename = resolve(base, request.url || '/');
     if (!filename) { response.writeHead(404); response.end('Not found'); return; }
     try {
       const actual = await realpath(filename), relative = path.relative(await realpath(base), actual);
-      if (relative.startsWith('..') || path.isAbsolute(relative) || !resolveRequest(base, '/' + relative.split(path.sep).join('/'))) throw new Error('Not a public file');
+      if (relative.startsWith('..') || path.isAbsolute(relative) || !resolve(base,publicURLForFile(relative))) throw new Error('Not a public file');
       const info = await stat(actual);
       if (!info.isFile()) throw new Error('Not a file');
       const etag = `W/"${info.size.toString(16)}-${info.mtimeMs.toString(16)}"`;
@@ -63,16 +71,17 @@ export function makeServer(base) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const base = args.includes('--preview') ? path.join(root, 'dist') : root;
+  const artifactIndex=args.indexOf('--artifact');
+  const base = artifactIndex>=0 ? path.resolve(args[artifactIndex+1]) : args.includes('--preview') ? path.join(root, 'dist') : root;
   const portIndex = args.indexOf('--port');
   const port = Number(portIndex >= 0 ? args[portIndex + 1] : process.env.PORT || 5173);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('端口必须在 1–65535 之间');
-  if (!(await stat(path.join(base, 'index.html')).catch(() => null))?.isFile()) {
+  if (!(await stat(publicFilename(base, '/index.html')).catch(() => null))?.isFile()) {
     throw new Error('未找到首页。预览前请先运行 npm run build。');
   }
-  const server = makeServer(base);
+  const server = makeServer(base,{standalone:artifactIndex>=0 && args.includes('--standalone')});
   server.on('error', (error) => { console.error(`启动失败：${error.message}。可用 --port 5174 指定其他端口。`); process.exitCode = 1; });
   server.listen(port, '127.0.0.1', () => {
-    console.log(`AI Game Lab · ${args.includes('--preview') ? '构建预览' : '开发'}\nhttp://127.0.0.1:${port}\n修改文件后刷新浏览器。按 Ctrl+C 结束。`);
+    console.log(`AI Game Lab · ${args.includes('--preview') ? '构建预览' : '开发'}\nhttp://127.0.0.1:${port}${args.includes('--game')?'/games/'+args[args.indexOf('--game')+1]+'/':'/'}\n修改文件后刷新浏览器。按 Ctrl+C 结束。`);
   });
 }

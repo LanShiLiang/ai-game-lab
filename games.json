@@ -17,7 +17,11 @@
     "entry": "games/orbit-dash/index.html",
     "cover": "games/orbit-dash/cover.svg",
     "accent": "#3554df",
-    "featured": false
+    "featured": false,
+    "source": {
+      "kind": "repository",
+      "repository": "game-orbit-dash"
+    }
   },
   {
     "id": "freight-fire",
@@ -39,7 +43,15 @@
     "entry": "games/freight-fire/index.html",
     "cover": "games/freight-fire/cover.webp",
     "accent": "#496b7b",
-    "featured": false
+    "featured": false,
+    "source": {
+      "kind": "repository",
+      "repository": "game-transport-ship"
+    },
+    "integration": {
+      "protocol": 1,
+      "pointerLock": true
+    }
   },
   {
     "id": "apex-rush",
@@ -60,6 +72,14 @@
     "entry": "games/apex-rush/index.html",
     "cover": "games/apex-rush/cover.webp",
     "accent": "#14aabb",
-    "featured": true
+    "featured": true,
+    "source": {
+      "kind": "repository",
+      "repository": "game-apex-rush"
+    },
+    "integration": {
+      "protocol": 1,
+      "pointerLock": true
+    }
   }
 ]

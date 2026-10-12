@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { repositoryURL, submissionDraft, ideaIssueURL } from '../src/submission.js';
+import { repositoryURL, submissionDraft, ideaIssueURL } from '../apps/web/src/submission.js';
 const receiver = 'https://github.com/LanShiLiang/ai-game-lab';
 const values = { name: '解谜 & 探险', repository: 'https://github.com/creator/puzzle.git', description: '探索迷宫，找到出口获胜。\n空格开始，方向键移动。', features: '会随光线改变的地图', requirements: '无需后端' };
 test('submission opens the configured inbox with intact Chinese and multiline data', () => {
